@@ -68,7 +68,7 @@ sample_names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
 ```{r select only microplastic samples}
 
 ## read in the meta data from the samples
-meta <- read.csv("Acerv_MP_Metadata.csv")
+meta <- read.csv("Data/Acerv_MP_Metadata.csv")
 
 
 # filter the sample name list to select neg controls and microplastic samples only
@@ -177,31 +177,71 @@ head(out)
 Viewing the quality of the same 2 of the forward samples post filtering and trimming
 ```{r forward quality plots post filter trim}
 
+## plot the filtered forward samples
 plotQualityProfile(filtFs[2:3])
+
+
+```
+
+```{r save forward quality plots post filter trim, eval=FALSE, include=FALSE}
+
+## save the filtered forward quality plots
+pdf(file = "Figures/Forward_filt_qualityPlots.pdf", width = 18, height = 14)
+plotQualityProfile(filtFs)
+dev.off()
 
 ```
 
 Viewing the quality of the same 2 of the reverse samples post filtering and trimming
 ```{r reverse quality plots post filter trim}
 
+## plot the filtered reverse samples
 plotQualityProfile(filtRs[2:3])
 
 ```
 
-<br/>
-<br/>
+```{r save reverse quality plots post filter trim, eval=FALSE, include=FALSE}
 
-
-### And then this...
-
-```{r}
-
-print("nap")
+## save the filtered reverse quality plots
+pdf(file = "Figures/Reverse_filt_qualityPlots.pdf", width = 18, height = 14)
+plotQualityProfile(filtRs)
+dev.off()
 
 ```
 
 <br/>
 <br/>
+
+
+### Learn Error Rates
+
+```{r}
+
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+
+```
+
+<br/>
+<br/>
+
+
+## Sample Inference
+
+```{r}
+
+dadaFs <- dada(filtFs, err=errF, multithread=TRUE)
+dadaFs[[1]]
+
+dadaRs <- dada(filtRs, err=errR, multithread=TRUE)
+dadaRs[[1]]
+
+```
+
 
 
 ## Session Information
