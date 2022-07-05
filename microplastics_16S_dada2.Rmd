@@ -1,0 +1,217 @@
+---
+title: "DADA2 sample processing for *A. cervicornis* microplastics project"
+date: "*Last run on `r format(Sys.time(), '%d %B %Y')`*"
+output: 
+  html_document:
+  theme: flatly
+toc: yes
+toc_depth: 3
+toc_float: yes
+---
+
+```{r set some defaults, echo = FALSE}
+
+library("knitr")
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+pdf.options(useDingbats = FALSE)
+
+```
+
+```{r install dada2, eval = FALSE, include = FALSE}
+
+## Downloading DADA2 following instructions found here:
+# https://benjjneb.github.io/dada2/dada-installation.html
+
+install.packages("devtools")
+library("devtools")
+devtools::install_github("benjjneb/dada2", ref="v1.18") # change the ref argument to get other versions
+
+```
+
+```{r load packages, echo = FALSE}
+
+library(dada2) # I have version 1.18.0 downloaded on the SCC for this
+library(tidyverse)
+
+```
+
+<br/>
+
+I am largely following the [DADA2](https://www.bioconductor.org/packages/release/bioc/manuals/dada2/man/dada2.pdf) tutorial by Benjamin Callahan that can be found [here](https://benjjneb.github.io/dada2/tutorial.html). 
+
+
+## Inspecting the data {.tabset}
+
+```{r set path to 16S samples}
+
+## the directory containing the fastq files after unzipping.
+path_16S <- "/projectnb/davieslab/bove/acer_MP/final_samples/16S_29Jun22" 
+
+# looks good! need to specify only using the microplastic samples
+# list.files(path_16S)
+
+```
+
+```{r extract fastq files and sample names}
+
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1.fastq and SAMPLENAME_R2.fastq
+fnFs <- sort(list.files(path_16S, pattern = "_R1.fastq", full.names = TRUE))
+fnRs <- sort(list.files(path_16S, pattern = "_R2.fastq", full.names = TRUE))
+
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample_names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+```
+
+### Check samples to use
+
+```{r select only microplastic samples}
+
+## read in the meta data from the samples
+meta <- read.csv("Acerv_MP_Metadata.csv")
+
+
+# filter the sample name list to select neg controls and microplastic samples only
+sample_names <- sample_names[sample_names %in% meta$sampleID]
+sample_names
+
+
+# filter the forward sequences for microplastics only
+fnFs <- fnFs %>% 
+  str_detect("/A|/B|/C|G5|G6", negate = FALSE) %>%
+  keep(fnFs, .)
+
+# filter the reverse sequences for microplastics only
+fnRs <- fnRs %>% 
+  str_detect("/A|/B|/C|G5|G6", negate = FALSE) %>%
+  keep(fnRs, .)
+
+```
+
+<br/>
+<br/>
+
+
+### View example quality plots
+
+Viewing the quality of 2 of the forward samples
+```{r firward quality plots}
+
+## This first sample is giving us the error:
+# Error: BiocParallel errors
+#   1 remote errors, element index: 1
+#   0 unevaluated and other errors
+#   first remote error: 'x' contains missing values
+
+## To fix this, I am going to go back and add '--minimum-length 1' to the 
+# cutadapt step to discard processed reads that are shorter than LENGTH.
+
+## Plot 2 samples for examples:
+plotQualityProfile(fnFs[2:3])
+
+
+## Saving the quality profiles of all (except sample A1) to view later if necessary
+Fs_qualityPlot <- plotQualityProfile(fnFs[-1])
+
+pdf(file = "Figures/Forward_qualityPlots.pdf", width = 18, height = 14)
+Fs_qualityPlot
+dev.off()
+
+```
+
+
+Viewing the quality of the same 2 of the reverse samples
+```{r reverse quality plots}
+
+## Plot 2 reverse samples for examples:
+plotQualityProfile(fnRs[2:3])
+
+## Saving the quality profiles of all to view later if necessary
+Rs_qualityPlot <- plotQualityProfile(fnRs)
+
+pdf(file = "Figures/Reverse_qualityPlots.pdf", width = 18, height = 14)
+Rs_qualityPlot
+dev.off()
+
+```
+
+<br/>
+<br/>
+
+
+## Filter and trim samples {.tabset}
+
+### Perform the filtering
+
+```{r}
+
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path_16S, "filtered", paste0(sample_names, "_filt_F.fastq.gz"))
+filtRs <- file.path(path_16S, "filtered", paste0(sample_names, "_filt_R.fastq.gz"))
+
+names(filtFs) <- sample_names
+names(filtRs) <- sample_names
+
+```
+
+```{r}
+
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs,
+                     truncLen = c(220, 210), # cut for the forward and reverse files
+                     maxN = 0, # DADA2 requires no Ns
+                     maxEE = c(1, 1), # reads with higher than maxEE "expected errors" will be discarded
+                     truncQ = 2, # Truncate reads at the first instance of a quality score less than or equal to truncQ
+                     rm.phix = TRUE, # If TRUE, discard reads that match against the phiX genome (kinda control bacteria)
+                     compress = TRUE, #  Whether the output fastq file should be gzip com- pressed.
+                     multithread = TRUE) # On Windows set multithread = FALSE
+head(out)
+
+```
+
+
+<br/>
+<br/>
+
+### Check the filtering
+
+Viewing the quality of the same 2 of the forward samples post filtering and trimming
+```{r forward quality plots post filter trim}
+
+plotQualityProfile(filtFs[2:3])
+
+```
+
+Viewing the quality of the same 2 of the reverse samples post filtering and trimming
+```{r reverse quality plots post filter trim}
+
+plotQualityProfile(filtRs[2:3])
+
+```
+
+<br/>
+<br/>
+
+
+### And then this...
+
+```{r}
+
+print("nap")
+
+```
+
+<br/>
+<br/>
+
+
+## Session Information
+
+All code was written by [Colleen B. Bove](https://colleenbove.science), feel free to contact with questions.
+
+Session information from the last run date on `r format(Sys.time(), '%d %B %Y')`:
+
+```{r print session info}
+
+sessionInfo()
+
+```
