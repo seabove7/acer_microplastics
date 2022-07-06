@@ -224,15 +224,6 @@ plotErrors(errF, nominalQ = TRUE)
 errR <- learnErrors(filtRs, multithread = TRUE)
 plotErrors(errR, nominalQ = TRUE)
 
-```
-
-<br/>
-<br/>
-
-
-## Sample Inference
-
-```{r}
 
 dadaFs <- dada(filtFs, err=errF, multithread=TRUE)
 dadaFs[[1]]
@@ -241,6 +232,115 @@ dadaRs <- dada(filtRs, err=errR, multithread=TRUE)
 dadaRs[[1]]
 
 ```
+
+<br/>
+<br/>
+
+
+## Merge paired reads
+
+```{r}
+
+### Dereplicate reads
+
+#Dereplication combines all identical sequencing reads into into “unique sequences” with a corresponding “abundance”: the number of reads with that unique sequence. 
+#Dereplication substantially reduces computation time by eliminating redundant comparisons.
+#DADA2 retains a summary of the quality information associated with each unique sequence. The consensus quality profile of a unique sequence is the average of the positional qualities from the dereplicated reads. These quality profiles inform the error model of the subsequent denoising step, significantly increasing DADA2’s accuracy.
+derepFs <- derepFastq(filtFs, verbose=TRUE)
+derepRs <- derepFastq(filtRs, verbose=TRUE)
+# Name the derep-class objects by the sample names
+names(derepFs) <- sample_names
+names(derepRs) <- sample_names
+
+dadaFs <- dada(derepFs, err=errF, multithread=TRUE)
+dadaRs <- dada(derepRs, err=errR, multithread=TRUE)
+
+#now, look at the dada class objects by sample
+#will tell how many 'real' variants in unique input seqs
+#By default, the dada function processes each sample independently, but pooled processing is available with pool=TRUE and that may give better results for low sampling depths at the cost of increased computation time. See our discussion about pooling samples for sample inference. 
+dadaFs[[1]]
+dadaRs[[1]]
+
+
+
+#To further cull spurious sequence variants
+#Merge the denoised forward and reverse reads
+#Paired reads that do not exactly overlap are removed
+
+mergers <- mergePairs(dadaFs, derepFs, dadaRs, derepRs, verbose=TRUE)
+# Inspect the merger data.frame from the first sample
+head(mergers[[1]])
+
+summary((mergers[[1]]))
+
+#We now have a data.frame for each sample with the merged $sequence, its $abundance, and the indices of the merged $forward and $reverse denoised sequences. Paired reads that did not exactly overlap were removed by mergePairs.
+
+seqtab <- makeSequenceTable(mergers)
+
+dim(seqtab)
+
+# Inspect distribution of sequence lengths
+table(nchar(getSequences(seqtab)))
+
+#saveRDS(seqtab,file="fl16s.seqtab.rds")
+
+plot(table(nchar(getSequences(seqtab)))) #real variants appear to be right in that 244-264 window
+### note: I've done this part previously to look at the peak before proceeding with desired length trimming below
+
+#The sequence table is a matrix with rows corresponding to (and named by) the samples, and 
+#columns corresponding to (and named by) the sequence variants. 
+#Sequences that are much longer or shorter than expected may be the result of non-specific priming, and may be worth removing
+
+seqtab2 <- seqtab[,nchar(colnames(seqtab)) %in% seq(244,264)] #again, being fairly conservative wrt length
+
+#The core dada method removes substitution and indel errors, but chimeras remain. 
+#Fortunately, the accuracy of the sequences after denoising makes identifying chimeras easier 
+#than it is when dealing with fuzzy OTUs: all sequences which can be exactly reconstructed as 
+#a bimera (two-parent chimera) from more abundant sequences.
+
+seqtab.nochim <- removeBimeraDenovo(seqtab2, method="consensus", multithread=TRUE, verbose=TRUE)
+dim(seqtab.nochim)
+#Identified 1930 bimeras out of 77085 input sequences.
+
+sum(seqtab.nochim)/sum(seqtab2)
+#
+#The fraction of chimeras varies based on factors including experimental procedures and sample complexity, 
+#but can be substantial. 
+
+# Track Read Stats #
+ 
+getN <- function(x) sum(getUniques(x))
+track <- cbind(out, sapply(dadaFs, getN), sapply(mergers, getN), rowSums(seqtab2), rowSums(seqtab.nochim))
+colnames(track) <- c("input", "filtered", "denoised", "merged", "tabled", "nonchim")
+rownames(track) <- sample_names
+head(track)
+tail(track)
+
+write.csv(track,file="Data/fl16s_readstats.csv",row.names=TRUE,quote=FALSE)
+saveRDS(seqtab.nochim,file="Data/fl16s_seqtab_nochim.RDS")
+
+
+
+
+
+seqtab.nochim <- readRDS("Data/fl16s_seqtab_nochim.RDS")
+
+ncol(seqtab.nochim)
+#75,430 raw ASVs
+
+sum(colSums(seqtab.nochim))
+#16793981 (16 million reads)
+#0.0005% = 84 reads
+
+seq.raw.keep <- which(colSums(seqtab.nochim)*100/(sum(colSums(seqtab.nochim))) > 0.0005)
+seq.trim <- seqtab.nochim[,seq.raw.keep]
+ncol(seq.trim)
+#12,836 ASVs remain
+
+saveRDS(seq.trim, file="fl16s_seqtab_trim0005.rds")
+
+```
+
 
 
 
