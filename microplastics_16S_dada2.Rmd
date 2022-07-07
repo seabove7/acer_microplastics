@@ -166,6 +166,9 @@ out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs,
                      multithread = TRUE) # On Windows set multithread = FALSE
 head(out)
 
+#the percent of reads making it through the filter and trim step:
+colSums(out)[2]/colSums(out)[1] # 95.5%
+
 ```
 
 
@@ -213,7 +216,7 @@ dev.off()
 <br/>
 
 
-### Learn Error Rates
+### Error Rates
 
 ```{r}
 
@@ -237,110 +240,176 @@ dadaRs[[1]]
 <br/>
 
 
-## Merge paired reads
+### Sample Inference
+
+We are now ready to apply [the core sample inference algorithm](https://www.nature.com/articles/nmeth.3869#methods) to the filtered and trimmed sequence data.
 
 ```{r}
 
-### Dereplicate reads
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
 
-#Dereplication combines all identical sequencing reads into into “unique sequences” with a corresponding “abundance”: the number of reads with that unique sequence. 
-#Dereplication substantially reduces computation time by eliminating redundant comparisons.
-#DADA2 retains a summary of the quality information associated with each unique sequence. The consensus quality profile of a unique sequence is the average of the positional qualities from the dereplicated reads. These quality profiles inform the error model of the subsequent denoising step, significantly increasing DADA2’s accuracy.
-derepFs <- derepFastq(filtFs, verbose=TRUE)
-derepRs <- derepFastq(filtRs, verbose=TRUE)
-# Name the derep-class objects by the sample names
-names(derepFs) <- sample_names
-names(derepRs) <- sample_names
 
-dadaFs <- dada(derepFs, err=errF, multithread=TRUE)
-dadaRs <- dada(derepRs, err=errR, multithread=TRUE)
-
-#now, look at the dada class objects by sample
-#will tell how many 'real' variants in unique input seqs
-#By default, the dada function processes each sample independently, but pooled processing is available with pool=TRUE and that may give better results for low sampling depths at the cost of increased computation time. See our discussion about pooling samples for sample inference. 
+# Inspecting the returned dada-class object:
 dadaFs[[1]]
-dadaRs[[1]]
-
-
-
-#To further cull spurious sequence variants
-#Merge the denoised forward and reverse reads
-#Paired reads that do not exactly overlap are removed
-
-mergers <- mergePairs(dadaFs, derepFs, dadaRs, derepRs, verbose=TRUE)
-# Inspect the merger data.frame from the first sample
-head(mergers[[1]])
-
-summary((mergers[[1]]))
-
-#We now have a data.frame for each sample with the merged $sequence, its $abundance, and the indices of the merged $forward and $reverse denoised sequences. Paired reads that did not exactly overlap were removed by mergePairs.
-
-seqtab <- makeSequenceTable(mergers)
-
-dim(seqtab)
-
-# Inspect distribution of sequence lengths
-table(nchar(getSequences(seqtab)))
-
-#saveRDS(seqtab,file="fl16s.seqtab.rds")
-
-plot(table(nchar(getSequences(seqtab)))) #real variants appear to be right in that 244-264 window
-### note: I've done this part previously to look at the peak before proceeding with desired length trimming below
-
-#The sequence table is a matrix with rows corresponding to (and named by) the samples, and 
-#columns corresponding to (and named by) the sequence variants. 
-#Sequences that are much longer or shorter than expected may be the result of non-specific priming, and may be worth removing
-
-seqtab2 <- seqtab[,nchar(colnames(seqtab)) %in% seq(244,264)] #again, being fairly conservative wrt length
-
-#The core dada method removes substitution and indel errors, but chimeras remain. 
-#Fortunately, the accuracy of the sequences after denoising makes identifying chimeras easier 
-#than it is when dealing with fuzzy OTUs: all sequences which can be exactly reconstructed as 
-#a bimera (two-parent chimera) from more abundant sequences.
-
-seqtab.nochim <- removeBimeraDenovo(seqtab2, method="consensus", multithread=TRUE, verbose=TRUE)
-dim(seqtab.nochim)
-#Identified 1930 bimeras out of 77085 input sequences.
-
-sum(seqtab.nochim)/sum(seqtab2)
-#
-#The fraction of chimeras varies based on factors including experimental procedures and sample complexity, 
-#but can be substantial. 
-
-# Track Read Stats #
- 
-getN <- function(x) sum(getUniques(x))
-track <- cbind(out, sapply(dadaFs, getN), sapply(mergers, getN), rowSums(seqtab2), rowSums(seqtab.nochim))
-colnames(track) <- c("input", "filtered", "denoised", "merged", "tabled", "nonchim")
-rownames(track) <- sample_names
-head(track)
-tail(track)
-
-write.csv(track,file="Data/fl16s_readstats.csv",row.names=TRUE,quote=FALSE)
-saveRDS(seqtab.nochim,file="Data/fl16s_seqtab_nochim.RDS")
-
-
-
-
-
-seqtab.nochim <- readRDS("Data/fl16s_seqtab_nochim.RDS")
-
-ncol(seqtab.nochim)
-#75,430 raw ASVs
-
-sum(colSums(seqtab.nochim))
-#16793981 (16 million reads)
-#0.0005% = 84 reads
-
-seq.raw.keep <- which(colSums(seqtab.nochim)*100/(sum(colSums(seqtab.nochim))) > 0.0005)
-seq.trim <- seqtab.nochim[,seq.raw.keep]
-ncol(seq.trim)
-#12,836 ASVs remain
-
-saveRDS(seq.trim, file="fl16s_seqtab_trim0005.rds")
 
 ```
 
+The DADA2 algorithm inferred 142 true sequence variants from the 9176 unique sequences in the first sample. There is much more to the dada-class return object than this (see help(`"dada-class"`) for some info), including multiple diagnostics about the quality of each denoised sequence variant, but that is beyond the scope of an introductory tutorial.
+
+
+### Merge paired reads
+
+We now merge the forward and reverse reads together to obtain the full denoised sequences. Merging is performed by aligning the denoised forward reads with the reverse-complement of the corresponding denoised reverse reads, and then constructing the merged “contig” sequences. By default, merged sequences are only output if the forward and reverse reads overlap by at least 12 bases, and are identical to each other in the overlap region (but these conditions can be changed via function arguments).
+
+```{r}
+
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+
+# Inspect the merger data.frame from the first sample
+head(mergers[[1]])
+
+```
+
+The mergers object is a list of data.frames from each sample. Each data.frame contains the merged sequence, its abundance, and the indices of the forward and reverse sequence variants that were merged. Paired reads that did not exactly overlap were removed by mergePairs, further reducing spurious output.
+
+### Construct sequence table
+
+We can now construct an amplicon sequence variant table (ASV) table, a higher-resolution version of the OTU table produced by traditional methods.
+
+```{r}
+
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+
+# Inspect distribution of read lengths
+table(nchar(getSequences(seqtab)))
+hist(nchar(getSequences(seqtab)))
+
+# Remove any ASVs that are considerably off target length
+seqtab_trimmed <- seqtab[,nchar(colnames(seqtab)) %in% seq(250,255)]
+table(nchar(getSequences(seqtab_trimmed)))
+
+```
+
+The sequence table is a matrix with rows corresponding to (and named by) the samples, and columns corresponding to (and named by) the sequence variants. This table contains `r dim(seqtab)[2]` ASVs.
+
+### Remove chimeras
+
+The core dada method corrects substitution and indel errors, but chimeras remain. Fortunately, the accuracy of sequence variants after denoising makes identifying chimeric ASVs simpler than when dealing with fuzzy OTUs. Chimeric sequences are identified if they can be exactly reconstructed by combining a left-segment and a right-segment from two more abundant “parent” sequences.
+
+```{r}
+
+seqtab_nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE, verbose=TRUE)
+dim(seqtab_nochim)
+
+sum(seqtab_nochim)/sum(seqtab)
+
+
+```
+
+
+### Track reads through the pipeline
+
+As a final check of our progress, we’ll look at the number of reads that made it through each step in the pipeline:
+
+```{r}
+
+getN <- function(x) sum(getUniques(x))
+track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab_nochim))
+# If processing a single sample, remove the sapply calls: e.g. replace sapply(dadaFs, getN) with getN(dadaFs)
+
+colnames(track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
+rownames(track) <- sample_names
+track
+
+```
+
+Looks good! We kept the majority of our raw reads, and there is no over-large drop associated with any single step.
+
+
+### Assign taxonomy
+
+It is common at this point, especially in 16S/18S/ITS amplicon sequencing, to assign taxonomy to the sequence variants. The DADA2 package provides a native implementation of the naive Bayesian classifier method for this purpose. The `assignTaxonomy` function takes as input a set of sequences to be classified and a training set of reference sequences with known taxonomy, and outputs taxonomic assignments with at least `minBoot` bootstrap confidence.
+
+We maintain formatted training fastas for the RDP training set, GreenGenes clustered at 97% identity, and the Silva reference database, and additional trainings fastas suitable for protists and certain specific environments have been contributed. For fungal taxonomy, the General Fasta release files from the UNITE ITS database can be used as is. To follow along, download the silva_nr99_v138.1_train_set.fa.gz file, and place it in the directory with the fastq files.
+
+The dada2 package GitHub maintains the most updated versions of the [Silva databases.](https://benjjneb.github.io/dada2/training.html). The versions in this GitHub repository, used here, were last updated on March 10, 2021.
+
+
+```{r}
+
+## going to move these out of this repo because they are too big:
+# path to SILVA files: /projectnb/davieslab/bove/SILVA_files
+
+
+taxa <- assignTaxonomy(seqtab_nochim, "/projectnb/davieslab/bove/SILVA_files/silva_nr99_v138.1_train_set.fa.gz", multithread=TRUE)
+
+# Extensions: The dada2 package also implements a method to make species level assignments based on exact matching between
+# ASVs and sequenced reference strains. Recent analysis suggests that exact matching (or 100% identity) is the only
+# appropriate way to assign species to 16S gene fragments. Currently, species-assignment training fastas are available for
+# the Silva and RDP 16S databases. To follow the optional species addition step, download the
+# silva_species_assignment_v138.1.fa.gz file, and place it in the directory with the fastq files.
+
+taxa_sp <- addSpecies(taxa, "/projectnb/davieslab/bove/SILVA_files/silva_species_assignment_v138.1.fa.gz")
+
+```
+
+Let’s inspect the taxonomic assignments:
+
+```{r}
+
+taxa_print <- taxa_sp # Removing sequence rownames for display only
+rownames(taxa_print) <- NULL
+head(taxa_print)
+
+```
+
+**Considerations for your own data:** If your reads do not seem to be appropriately assigned, for example lots of your bacterial 16S sequences are being assigned as Eukaryota NA NA NA NA NA, your reads may be in the opposite orientation as the reference database. Tell dada2 to try the reverse-complement orientation with assignTaxonomy(..., tryRC=TRUE) and see if this fixes the assignments. If using DECIPHER for taxonomy, try IdTaxa (..., strand="both").
+
+
+### Handoff to phyloseq
+
+```{r}
+
+## Install missing packages
+# install.packages("Biostrings")
+# 
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install(version = "3.14")
+# BiocManager::install("phyloseq")
+
+library(phyloseq)
+library(Biostrings)
+library(ggplot2)
+
+theme_set(theme_bw())
+
+```
+
+```{r}
+
+# Export sequence table with genus and species assignments as phyloseq objects
+pylo <- phyloseq(otu_table(seqtab_nochim, taxa_are_rows=FALSE), tax_table(taxa))
+pylo_sp <- phyloseq(otu_table(seqtab_nochim, taxa_are_rows=FALSE), tax_table(taxa_sp))
+
+#originally, sequences were the taxa names
+seqs_ps <- taxa_names(pylo_sp)
+
+#change taxa names to ASVs
+taxa_names(pylo_sp) <- paste0("ASV", seq(ntaxa(pylo_sp)))
+
+# save a file of the taxa table with ASVs and sequences
+taxtab_seqs <- cbind(data.frame(tax_table(pylo_sp)), seqs_ps)
+write.csv(taxtab_seqs,"Data/taxatable_withsequences.csv")
+
+
+# Save as RDS objects
+saveRDS(pylo, file = "Data/phylo.rds") # does not have species level
+saveRDS(pylo_sp, file = "Data/pylo_sp.rds") # with species level and ASV labeling
+
+```
 
 
 
