@@ -27,6 +27,18 @@ install.packages("devtools")
 library("devtools")
 devtools::install_github("benjjneb/dada2", ref="v1.20", force = TRUE) # change the ref argument to get other versions
 
+
+## install phyloseq packages
+install.packages("Biostrings")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install(version = "3.14")
+BiocManager::install("phyloseq")
+
+## used for removing contamination from neg controls
+BiocManager::install("decontam")
+
 ```
 
 ```{r load packages, echo = FALSE}
@@ -34,6 +46,11 @@ devtools::install_github("benjjneb/dada2", ref="v1.20", force = TRUE) # change t
 library(dada2) # I have version 1.18.0 downloaded on the SCC for this
 library(tidyverse)
 library(ShortRead)
+library(kableExtra)
+library(phyloseq)
+library(decontam)
+library(RColorBrewer)
+library(plotly)
 
 ```
 
@@ -78,10 +95,13 @@ sample_names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
 ## read in the meta data from the samples
 meta <- read.csv("Data/Acerv_MP_Metadata.csv")
 
-
 # filter the sample name list to select neg controls and microplastic samples only
 sample_names <- sample_names[sample_names %in% meta$sampleID]
 sample_names
+
+# reordering these so they match the order of sample names 
+meta <- meta[match(sample_names, meta$sampleID),] 
+rownames(meta) <- meta$sampleID
 
 
 # filter the forward sequences for microplastics only
@@ -97,7 +117,7 @@ fnRs <- fnRs %>%
 ```
 
 
-```{r eval=FALSE, include=FALSE}
+```{r set some standards for checking primers, include=FALSE}
 
 #### check for primers ####
 FWD <- "GTGYCAGCMGCCGCGGTAA"  ## CHANGE ME to your forward primer sequence
@@ -114,18 +134,22 @@ allOrients <- function(primer) {
 
 FWD.orients <- allOrients(FWD)
 REV.orients <- allOrients(REV)
-FWD.orients
-REV.orients
 
-fnFs.filtN <- file.path(path_16S, "filtN", basename(fnFs)) # Put N-filterd files in filtN/ subdirectory
-fnRs.filtN <- file.path(path_16S, "filtN", basename(fnRs))
-filterAndTrim(fnFs, fnFs.filtN, fnRs, fnRs.filtN, maxN = 0, multithread = TRUE)
 
 primerHits <- function(primer, fn) {
   # Counts number of reads in which the primer is found
   nhits <- vcountPattern(primer, sread(readFastq(fn)), fixed = FALSE)
   return(sum(nhits > 0))
 }
+
+```
+
+```{r double check for primers left, eval=FALSE, include=FALSE}
+
+fnFs.filtN <- file.path(path_16S, "filtN", basename(fnFs)) # Put N-filterd files in filtN/ subdirectory
+fnRs.filtN <- file.path(path_16S, "filtN", basename(fnRs))
+filterAndTrim(fnFs, fnFs.filtN, fnRs, fnRs.filtN, maxN = 0, multithread = TRUE)
+
 
 #towards the beginning
 rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.filtN[[1]]), 
@@ -139,30 +163,29 @@ rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.filtN[[4]]),
       REV.ForwardReads = sapply(REV.orients, primerHits, fn = fnFs.filtN[[4]]), 
       REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs.filtN[[4]]))
 
-
-
-
-
-fnFs_cut <- file.path(path_cut, basename(fnFs)) # Put N-filterd files in filtN/ subdirectory
-fnRs_cut <- file.path(path_cut, basename(fnRs))
-
-
-
-#towards the beginning
-rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.cut[[1]]), 
-      FWD.ReverseReads = sapply(FWD.orients, primerHits, fn = fnRs.cut[[1]]), 
-      REV.ForwardReads = sapply(REV.orients, primerHits, fn = fnFs.cut[[1]]), 
-      REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs.cut[[1]]))
-
-#at the end
-rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.cut[[4]]), 
-      FWD.ReverseReads = sapply(FWD.orients, primerHits, fn = fnRs.cut[[4]]), 
-      REV.ForwardReads = sapply(REV.orients, primerHits, fn = fnFs.cut[[4]]), 
-      REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs.cut[[4]]))
-
-
 ```
 
+```{r remove the extra primers that were left, eval=FALSE, include=FALSE}
+
+fnFs_cut <- file.path(path_16S, "cutadapt", basename(fnFs)) # 16S path with the subdirectory 'cutadapt' then the sample names
+fnRs_cut <- file.path(path_16S, "cutadapt", basename(fnRs))
+
+#towards the beginning
+rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs_cut[[1]]), 
+      FWD.ReverseReads = sapply(FWD.orients, primerHits, fn = fnRs_cut[[1]]), 
+      REV.ForwardReads = sapply(REV.orients, primerHits, fn = fnFs_cut[[1]]), 
+      REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs_cut[[1]]))
+
+#at the end
+rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs_cut[[4]]), 
+      FWD.ReverseReads = sapply(FWD.orients, primerHits, fn = fnRs_cut[[4]]), 
+      REV.ForwardReads = sapply(REV.orients, primerHits, fn = fnFs_cut[[4]]), 
+      REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs_cut[[4]]))
+
+
+# no more primers were detected after this second cutadapt step
+
+```
 
 <br/>
 <br/>
@@ -171,16 +194,11 @@ rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.cut[[4]]),
 ### View example quality plots
 
 Viewing the quality of 2 of the forward samples
-```{r firward quality plots}
+```{r firward quality plots, fig.height = 4, fig.width = 6}
 
-## This first sample is giving us the error:
-# Error: BiocParallel errors
-#   1 remote errors, element index: 1
-#   0 unevaluated and other errors
-#   first remote error: 'x' contains missing values
+fnFs_cut <- file.path(path_16S, "cutadapt", basename(fnFs)) # 16S path with the subdirectory 'cutadapt' then the sample names
+fnRs_cut <- file.path(path_16S, "cutadapt", basename(fnRs))
 
-## To fix this, I am going to go back and add '--minimum-length 1' to the 
-# cutadapt step to discard processed reads that are shorter than LENGTH.
 
 ## Plot 2 samples for examples:
 plotQualityProfile(fnFs_cut[1:2])
@@ -188,7 +206,7 @@ plotQualityProfile(fnFs_cut[1:2])
 ```
 
 Viewing the quality of the same 2 of the reverse samples
-```{r reverse quality plots}
+```{r reverse quality plots, fig.height = 4, fig.width = 6}
 
 ## Plot 2 reverse samples for examples:
 plotQualityProfile(fnRs_cut[1:2])
@@ -198,7 +216,7 @@ plotQualityProfile(fnRs_cut[1:2])
 ```{r eval=FALSE, include=FALSE}
 
 ## Saving the quality profiles of all (except sample A1) to view later if necessary
-Fs_qualityPlot <- plotQualityProfile(fnFs[-1])
+Fs_qualityPlot <- plotQualityProfile(fnFs_cut)
 
 png(file = "Figures/Forward_qualityPlots.png", width = 30, height = 23, res = 1200, unit = "cm")
 Fs_qualityPlot
@@ -206,7 +224,7 @@ dev.off()
 
 
 ## Saving the quality profiles of all to view later if necessary
-Rs_qualityPlot <- plotQualityProfile(fnRs)
+Rs_qualityPlot <- plotQualityProfile(fnRs_cut)
 
 png(file = "Figures/Reverse_qualityPlots.png", width = 30, height = 23, res = 1200, unit = "cm")
 Rs_qualityPlot
@@ -222,20 +240,20 @@ dev.off()
 
 ### Perform the filtering
 
-```{r}
+You can see in above figures that the quality of reads drop off towards the end, so we need to filter out these low quality reads
+
+```{r filtering low quality reads}
 
 # Place filtered files in filtered/ subdirectory
 filtFs <- file.path(path_16S, "filtered", paste0(sample_names, "_filt_F.fastq.gz"))
 filtRs <- file.path(path_16S, "filtered", paste0(sample_names, "_filt_R.fastq.gz"))
 
+# name the file paths with the corresponding sample names
 names(filtFs) <- sample_names
 names(filtRs) <- sample_names
 
-```
 
-```{r}
-
-out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs,
+filt_out <- filterAndTrim(fnFs_cut, filtFs, fnRs_cut, filtRs,
                      truncLen = c(220, 210), # cut for the forward and reverse files
                      maxN = 0, # DADA2 requires no Ns
                      maxEE = c(1, 1), # reads with higher than maxEE "expected errors" will be discarded
@@ -243,13 +261,14 @@ out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs,
                      rm.phix = TRUE, # If TRUE, discard reads that match against the phiX genome (kinda control bacteria)
                      compress = TRUE, #  Whether the output fastq file should be gzip com- pressed.
                      multithread = TRUE) # On Windows set multithread = FALSE
-head(out)
+head(filt_out)
 
-#the percent of reads making it through the filter and trim step:
-colSums(out)[2]/colSums(out)[1] # 95.5%
+# the percent of reads making it through the filter and trim step:
+filter_perc <- (colSums(filt_out)[2]/colSums(filt_out)[1] * 100) # 95.5%
 
 ```
 
+After filtering out the low quality reads, we have maintained about `r round(filter_perc, 1)` of the original reads.
 
 <br/>
 <br/>
@@ -257,35 +276,34 @@ colSums(out)[2]/colSums(out)[1] # 95.5%
 ### Check the filtering
 
 Viewing the quality of the same 2 of the forward samples post filtering and trimming
-```{r forward quality plots post filter trim}
+```{r forward quality plots post filter trim, fig.height = 3, fig.width = 6, fig.align = "center"}
 
 ## plot the filtered forward samples
-plotQualityProfile(filtFs[2:3])
-
+plotQualityProfile(filtFs[1:2])
 
 ```
 
 ```{r save forward quality plots post filter trim, eval=FALSE, include=FALSE}
 
 ## save the filtered forward quality plots
-pdf(file = "Figures/Forward_filt_qualityPlots.pdf", width = 18, height = 14)
+png(file = "Figures/Forward_filt_qualityPlots.png", width = 30, height = 23, res = 1200, unit = "cm")
 plotQualityProfile(filtFs)
 dev.off()
 
 ```
 
 Viewing the quality of the same 2 of the reverse samples post filtering and trimming
-```{r reverse quality plots post filter trim}
+```{r reverse quality plots post filter trim, fig.height = 3, fig.width = 6, fig.align = "center"}
 
 ## plot the filtered reverse samples
-plotQualityProfile(filtRs[2:3])
+plotQualityProfile(filtRs[1:2])
 
 ```
 
 ```{r save reverse quality plots post filter trim, eval=FALSE, include=FALSE}
 
 ## save the filtered reverse quality plots
-pdf(file = "Figures/Reverse_filt_qualityPlots.pdf", width = 18, height = 14)
+png(file = "Figures/Reverse_filt_qualityPlots.png", width = 30, height = 23, res = 1200, unit = "cm")
 plotQualityProfile(filtRs)
 dev.off()
 
@@ -295,25 +313,36 @@ dev.off()
 <br/>
 
 
+## DADA2 sample processing {.tabset}
+
 ### Error Rates
 
-```{r}
+```{r learn errors and save, eval=FALSE, include=FALSE}
+
+### Learning the error rates takes a few minutes so I am saving it as an R object to call in line. If things are modified upstream, this needs to be rerun.
 
 errF <- learnErrors(filtFs, multithread = TRUE)
-plotErrors(errF, nominalQ = TRUE)
-
-
 errR <- learnErrors(filtRs, multithread = TRUE)
-plotErrors(errR, nominalQ = TRUE)
+
+# visualize errors
+errF_plot <- plotErrors(errF, nominalQ = TRUE)
+errR_plot <- plotErrors(errR, nominalQ = TRUE)
 
 
-dadaFs <- dada(filtFs, err=errF, multithread=TRUE)
-dadaFs[[1]]
-
-dadaRs <- dada(filtRs, err=errR, multithread=TRUE)
-dadaRs[[1]]
+## Save the error rates
+save(errF, errR, errF_plot, errR_plot, file = "Data/dada_phylo/dada_errors.Rdata")
 
 ```
+
+```{r load and viz errors, fig.height = 5, fig.width = 7, fig.align = "center"}
+
+load("Data/dada_phylo/dada_errors.Rdata")
+
+errF_plot
+
+```
+
+The error rates for each possible transition (A→C, A→G, …) are shown. Points are the observed error rates for each consensus quality score. The black line shows the estimated error rates after convergence of the machine-learning algorithm. The red line shows the error rates expected under the nominal definition of the Q-score. We want the estimated error rates (black line) to be a good fit to the observed rates (points), and the error rates to drop with increased quality.
 
 <br/>
 <br/>
@@ -323,106 +352,178 @@ dadaRs[[1]]
 
 We are now ready to apply [the core sample inference algorithm](https://www.nature.com/articles/nmeth.3869#methods) to the filtered and trimmed sequence data.
 
-```{r}
+<br/>
 
+**Forward sample inference**
+```{r forward sample inference}
+
+# Core sample inference of forward samples
 dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
-dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
 
+```
+
+Inspecting the returned dada-class object for the first forward sample:
+```{r view dada class object}
 
 # Inspecting the returned dada-class object:
 dadaFs[[1]]
 
 ```
 
-The DADA2 algorithm inferred 142 true sequence variants from the 9176 unique sequences in the first sample. There is much more to the dada-class return object than this (see help(`"dada-class"`) for some info), including multiple diagnostics about the quality of each denoised sequence variant, but that is beyond the scope of an introductory tutorial.
+The DADA2 algorithm inferred 144 true sequence variants from the 9515 unique sequences in the first sample. There is much more to the dada-class return object than this (see help(`"dada-class"`) for some info), including multiple diagnostics about the quality of each denoised sequence variant, but that is beyond the scope of an introductory tutorial.
+
+<br/>
+
+**Reverse sample inference**
+```{r reverse sample inference}
+
+# Core sample inference of reverse samples
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+
+```
+
+<br/>
+<br/>
 
 
 ### Merge paired reads
 
 We now merge the forward and reverse reads together to obtain the full denoised sequences. Merging is performed by aligning the denoised forward reads with the reverse-complement of the corresponding denoised reverse reads, and then constructing the merged “contig” sequences. By default, merged sequences are only output if the forward and reverse reads overlap by at least 12 bases, and are identical to each other in the overlap region (but these conditions can be changed via function arguments).
 
-```{r}
+```{r merge paired reads}
 
-mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+mergers <- mergePairs(dadaF = dadaFs, # dada-class object(s) generated by denoising the forward reads.
+                      derepF = filtFs, # derep-class object(s) used as input to the the dada function when denoising (for)
+                      dadaR = dadaRs, # dada-class object(s) generated by denoising the reverse reads.
+                      derepR = filtRs, # derep-class object(s) used as input to the the dada function when denoising (rev)
+                      verbose = TRUE) # summary of the function results are printed to standard output (verbose = TRUE)
 
 # Inspect the merger data.frame from the first sample
-head(mergers[[1]])
+#head(mergers[[1]])
 
 ```
 
 The mergers object is a list of data.frames from each sample. Each data.frame contains the merged sequence, its abundance, and the indices of the forward and reverse sequence variants that were merged. Paired reads that did not exactly overlap were removed by mergePairs, further reducing spurious output.
 
+<br/>
+<br/>
+
+
 ### Construct sequence table
 
 We can now construct an amplicon sequence variant table (ASV) table, a higher-resolution version of the OTU table produced by traditional methods.
 
-```{r}
+<br/>
+
+```{r make ASV table}
 
 seqtab <- makeSequenceTable(mergers)
-dim(seqtab)
+#dim(seqtab) # 38 samples, 3546 sequence variants
 
 # Inspect distribution of read lengths
 table(nchar(getSequences(seqtab)))
 hist(nchar(getSequences(seqtab)))
 
+```
+
+The sequence table is a matrix with rows corresponding to (and named by) the samples, and columns corresponding to (and named by) the sequence variants. This table contains `r dim(seqtab)[2]` ASVs.
+
+<br/>
+
+After viewing the distribution of read lengths, it looks like we have some that fall outside the expected range (244 - 264) so we will go ahead and remove these non target length sequences.
+
+```{r remove nontarget sequences}
+
 # Remove any ASVs that are considerably off target length
-seqtab_trimmed <- seqtab[,nchar(colnames(seqtab)) %in% seq(250,255)]
+seqtab_trimmed <- seqtab[,nchar(colnames(seqtab)) %in% seq(244,264)]
 table(nchar(getSequences(seqtab_trimmed)))
 
 ```
 
-The sequence table is a matrix with rows corresponding to (and named by) the samples, and columns corresponding to (and named by) the sequence variants. This table contains `r dim(seqtab)[2]` ASVs.
+This updated table now contains `r dim(seqtab_trimmed)[2]` ASVs.
+
+<br/>
+<br/>
+
 
 ### Remove chimeras
 
 The core dada method corrects substitution and indel errors, but chimeras remain. Fortunately, the accuracy of sequence variants after denoising makes identifying chimeric ASVs simpler than when dealing with fuzzy OTUs. Chimeric sequences are identified if they can be exactly reconstructed by combining a left-segment and a right-segment from two more abundant “parent” sequences.
 
-```{r}
+```{r find chimeras}
 
-seqtab_nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE, verbose=TRUE)
-dim(seqtab_nochim)
+seqtab_nochim <- removeBimeraDenovo(seqtab_trimmed, method = "consensus", multithread = TRUE, verbose = TRUE)
+#dim(seqtab_nochim)
+rownames(seqtab_nochim) <- gsub("_filt_F.fastq.gz", "", rownames(seqtab_nochim))
 
-sum(seqtab_nochim)/sum(seqtab)
+perc_nochim <- (sum(seqtab_nochim)/sum(seqtab) * 100) # percent non chimera sequences kept
 
+
+## Save the chimera-free ASV table to load in downstream analyses
+save(seqtab_nochim, file = "Data/dada_phylo/seqtab_nochim.Rdata")
 
 ```
+
+A total of `r dim(seqtab_trimmed)[2] - dim(seqtab_nochim)[2]` bimeras were identified from the `r dim(seqtab_nochim)[2]` input sequences, thus retaining `r round(perc_nochim, 1)`% of sequences.
+
+<br/>
+<br/>
 
 
 ### Track reads through the pipeline
 
-As a final check of our progress, we’ll look at the number of reads that made it through each step in the pipeline:
+As a final check of our progress, we can look at the number of reads that made it through each step in the pipeline:
 
-```{r}
+```{r track reads through pipeline}
 
-getN <- function(x) sum(getUniques(x))
-track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab_nochim))
+getN <- function(x) sum(getUniques(x)) # write function to count reads for all samples through time
+
+track_reads <- cbind(meta[c(1,3:4)], filt_out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab_nochim))
 # If processing a single sample, remove the sapply calls: e.g. replace sapply(dadaFs, getN) with getN(dadaFs)
 
-colnames(track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
-rownames(track) <- sample_names
-track
+colnames(track_reads) <- c("Sample ID", "Genotype", "Treatment", "Input", "Filtered", "Denoised Forward", "Denoised Reverse", "Merged", "Nonchimera")
+rownames(track_reads) <- sample_names
 
 ```
 
-Looks good! We kept the majority of our raw reads, and there is no over-large drop associated with any single step.
+```{r kable of reads through pipeline}
+
+kable(track_reads[-1], row.names = FALSE) %>% 
+  #kable_minimal() %>% 
+  kable_classic_2() %>% 
+  kable_styling(font_size = 14, full_width = FALSE) %>% 
+  column_spec(1, bold = TRUE) %>% 
+  column_spec(2, border_right = TRUE)
+
+write.csv(track_reads, "Tables/Track_Reads.csv", row.names = FALSE)
+
+```
+
+<br/>
+<br/>
 
 
-### Assign taxonomy
+## Assign taxonomy
 
 It is common at this point, especially in 16S/18S/ITS amplicon sequencing, to assign taxonomy to the sequence variants. The DADA2 package provides a native implementation of the naive Bayesian classifier method for this purpose. The `assignTaxonomy` function takes as input a set of sequences to be classified and a training set of reference sequences with known taxonomy, and outputs taxonomic assignments with at least `minBoot` bootstrap confidence.
 
-We maintain formatted training fastas for the RDP training set, GreenGenes clustered at 97% identity, and the Silva reference database, and additional trainings fastas suitable for protists and certain specific environments have been contributed. For fungal taxonomy, the General Fasta release files from the UNITE ITS database can be used as is. To follow along, download the silva_nr99_v138.1_train_set.fa.gz file, and place it in the directory with the fastq files.
+The dada2 package GitHub maintains the most updated versions of the [Silva databases.](https://benjjneb.github.io/dada2/training.html), but I downloaded the databases from the associated [Zenodo](https://zenodo.org/record/4587955#.YuBdCS-cbOQ). The versions in this GitHub repository, used here, were last updated on 26 July 2022.
 
-The dada2 package GitHub maintains the most updated versions of the [Silva databases.](https://benjjneb.github.io/dada2/training.html). The versions in this GitHub repository, used here, were last updated on March 10, 2021.
-
-
-```{r}
+```{r SILVA path, eval=FALSE, include=FALSE}
 
 ## going to move these out of this repo because they are too big:
-# path to SILVA files: /projectnb/davieslab/bove/SILVA_files
+# SCC path to SILVA files: /projectnb/davieslab/bove/SILVA_files
+# local path to SILVA files: /Users/colleen/Dropbox/BU/DaviesLab/ACER_microplastics/SILVA/
+
+if(length(grep("Dropbox", wd)) > 0) {
+  silva_path <- "/Users/colleen/Dropbox/BU/DaviesLab/ACER_microplastics/SILVA/silva_nr99_v138.1_train_set.fa.gz" 
+} else {
+  silva_path <- "/projectnb/davieslab/bove/SILVA_files/silva_nr99_v138.1_train_set.fa.gz" 
+}
+
+taxa <- assignTaxonomy(seqtab_nochim, silva_path, multithread=TRUE)
 
 
-taxa <- assignTaxonomy(seqtab_nochim, "/projectnb/davieslab/bove/SILVA_files/silva_nr99_v138.1_train_set.fa.gz", multithread=TRUE)
 
 # Extensions: The dada2 package also implements a method to make species level assignments based on exact matching between
 # ASVs and sequenced reference strains. Recent analysis suggests that exact matching (or 100% identity) is the only
@@ -430,13 +531,26 @@ taxa <- assignTaxonomy(seqtab_nochim, "/projectnb/davieslab/bove/SILVA_files/sil
 # the Silva and RDP 16S databases. To follow the optional species addition step, download the
 # silva_species_assignment_v138.1.fa.gz file, and place it in the directory with the fastq files.
 
-taxa_sp <- addSpecies(taxa, "/projectnb/davieslab/bove/SILVA_files/silva_species_assignment_v138.1.fa.gz")
+if(length(grep("Dropbox", wd)) > 0) {
+  silva_sp_path <- "/Users/colleen/Dropbox/BU/DaviesLab/ACER_microplastics/SILVA/silva_species_assignment_v138.1.fa.gz" 
+} else {
+  silva_sp_path <- "/projectnb/davieslab/bove/SILVA_files/silva_species_assignment_v138.1.fa.gz" 
+}
+
+taxa_sp <- addSpecies(taxa, silva_sp_path)
+
+
+
+## Save objects to save time running (but will need to rerun if making upstream adjustments)
+save(taxa, taxa_sp, file = "Data/dada_phylo/taxa_assign.Rdata")
 
 ```
 
 Let’s inspect the taxonomic assignments:
 
-```{r}
+```{r load phylo taxa objects and view}
+
+load("Data/dada_phylo/taxa_assign.Rdata")
 
 taxa_print <- taxa_sp # Removing sequence rownames for display only
 rownames(taxa_print) <- NULL
@@ -444,125 +558,158 @@ head(taxa_print)
 
 ```
 
-**Considerations for your own data:** If your reads do not seem to be appropriately assigned, for example lots of your bacterial 16S sequences are being assigned as Eukaryota NA NA NA NA NA, your reads may be in the opposite orientation as the reference database. Tell dada2 to try the reverse-complement orientation with assignTaxonomy(..., tryRC=TRUE) and see if this fixes the assignments. If using DECIPHER for taxonomy, try IdTaxa (..., strand="both").
-
-
-### Handoff to phyloseq
-
-```{r}
-
-## Install missing packages
-# install.packages("Biostrings")
-# 
-# if (!require("BiocManager", quietly = TRUE))
-#     install.packages("BiocManager")
-# BiocManager::install(version = "3.14")
-# BiocManager::install("phyloseq")
-
-library(phyloseq)
-library(Biostrings)
-library(ggplot2)
-
-theme_set(theme_bw())
-
-```
-
-```{r}
+```{r create ASV table using phyloseq}
 
 # Export sequence table with genus and species assignments as phyloseq objects
-pylo <- phyloseq(otu_table(seqtab_nochim, taxa_are_rows=FALSE), tax_table(taxa))
-pylo_sp <- phyloseq(otu_table(seqtab_nochim, taxa_are_rows=FALSE), tax_table(taxa_sp))
+phylo <- phyloseq(otu_table(seqtab_nochim, taxa_are_rows = FALSE), sample_data(meta), tax_table(taxa))
+phylo_sp <- phyloseq(otu_table(seqtab_nochim, taxa_are_rows = FALSE), sample_data(meta), tax_table(taxa_sp))
 
-#originally, sequences were the taxa names
-seqs_ps <- taxa_names(pylo_sp)
+# originally, sequences were the taxa names
+seqs_ps <- taxa_names(phylo_sp)
 
-#change taxa names to ASVs
-taxa_names(pylo_sp) <- paste0("ASV", seq(ntaxa(pylo_sp)))
+# change taxa names to ASVs
+taxa_names(phylo_sp) <- paste0("ASV", seq(ntaxa(phylo_sp)))
 
 # save a file of the taxa table with ASVs and sequences
-taxtab_seqs <- cbind(data.frame(tax_table(pylo_sp)), seqs_ps)
-write.csv(taxtab_seqs,"Data/taxatable_withsequences.csv")
+taxtab_seqs <- cbind(data.frame(tax_table(phylo_sp)), seqs_ps)
+write.csv(taxtab_seqs,"Data/dada_phylo/taxatable_withsequences.csv")
 
 
 # Save as RDS objects
-saveRDS(pylo, file = "Data/phylo.rds") # does not have species level
-saveRDS(pylo_sp, file = "Data/pylo_sp.rds") # with species level and ASV labeling
+save(phylo, phylo_sp, file = "Data/dada_phylo/phylo_objs.Rdata") # save both with and without species level and ASV labeling
 
 ```
 
-## Phyloseq pipeline
+Great! We can now save this and hand it off to Phyloseq for further analyses.
 
-We can construct a simple sample data.frame from the information encoded in the filenames. Usually this step would instead involve reading the sample data in from a file.
-
-```{r}
-
-head(meta)
-
-row.names(meta) <- meta$sampleID
-
-```
-
-We now construct a phyloseq object directly from the dada2 outputs.
-
-```{r}
-
-ps <- phyloseq(otu_table(seqtab_nochim, taxa_are_rows=FALSE), 
-               sample_data(data.frame(meta[c(3,4)])), 
-               tax_table(taxa))
+<br/>
+<br/>
 
 
-dna <- Biostrings::DNAStringSet(taxa_names(ps))
-names(dna) <- taxa_names(ps)
-ps <- merge_phyloseq(ps, dna)
-taxa_names(ps) <- paste0("ASV", seq(ntaxa(ps)))
-ps
+## Remove contaminations {.tabset}
 
+### Remove mitochondria, chloroplasts, and non-bacteria
 
+```{r load phylo objects}
 
-# We are now ready to use phyloseq!
-
-## Visualize alpha-diversity:
-
-plot_richness(ps, x = "Treatment", measures = c("Shannon", "Simpson"), color = "Genotype")
-
-## WARNING:
-# Warning message:
-# In estimate_richness(physeq, split = TRUE, measures = measures) :
-#   The data you have provided does not have
-# any singletons. This is highly suspicious. Results of richness
-# estimates (for example) are probably unreliable, or wrong, if you have already
-# trimmed low-abundance taxa from the data.
-# 
-# We recommended that you find the un-trimmed data and retry.
-
-
-
-## Ordinate:
-
-# Transform data to proportions as appropriate for Bray-Curtis distances
-ps.prop <- transform_sample_counts(ps, function(otu) otu/sum(otu))
-ord.nmds.bray <- ordinate(ps.prop, method="NMDS", distance="bray")
-
-
-plot_ordination(ps.prop, ord.nmds.bray, color="Treatment", title="Bray NMDS")
-
-
-## Bar plot:
-
-top20 <- names(sort(taxa_sums(ps), decreasing=TRUE))[1:20]
-ps.top20 <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
-ps.top20 <- prune_taxa(top20, ps.top20)
-# plot_bar(ps.top20, x="Treatment", fill="Class") #+ facet_wrap(~When, scales="free_x")
+## Load the phyloseq objects created above
+load(file = "Data/dada_phylo/phylo_objs.Rdata")
 
 ```
 
-```{r}
+```{r remove contam taxa}
 
-plot_bar2 <- function (physeq, x = "Sample", y = "Abundance", fill = NULL, colour = NULL,
-  title = NULL, facet_grid = NULL) 
-{
+# remove all mitochondria from family  
+ps_nomito <- subset_taxa(phylo_sp, (Family != "Mitochondria") | is.na(Family))
+
+# remove all chloroplast from order
+ps_nochlor <- subset_taxa(ps_nomito, (Order != "Chloroplast") | is.na(Order))
+
+# remove all non-bacteria
+ps_clean <- subset_taxa(ps_nochlor, (Kingdom == "Bacteria"))
+ps_clean
+
+
+# subset for just archaea
+ps_arch <- subset_taxa(ps_nomito, (Kingdom == "Archaea"))
+
+```
+
+Removal of mitochondira, chloroplasts, and non-bacteria taxa reduced the total number of taxa from `r dim(phylo_sp@otu_table)[[2]]` to `r dim(ps_clean@otu_table)[[2]]`. 
+
+<br/>
+<br/>
+
+
+### Remove neg control contamination
+
+```{r library size, fig.height = 4, fig.width = 6, fig.align = "center"}
+
+## Visualize library sizes per sample
+df <- data.frame(sample_data(ps_clean)) # make sample_data a dataframe
+df$LibrarySize <- sample_sums(ps_clean) # add reads per sample
+df <- df[order(df$LibrarySize),] # reorder df from lowest to highest library size
+df$Index <- seq(nrow(df)) # add index for plotting
+
+# plot library size by treatment
+ggplot(data = df, aes(x = Index, y = LibrarySize, color = Treatment)) + 
+  geom_point() +
+  ggtitle("Library size by treatment of all samples")
+
+## identify contaminants based on neg controls
+sample_data(ps_clean)$is.neg <- sample_data(ps_clean)$Treatment == "blank_control" # identify neg controls & add to sample data
+contamdf_freq <- isContaminant(ps_clean, neg = "is.neg", threshold = 0.5) # The frequency of each sequence (or OTU) in the input feature table as a function of the concentration of amplified DNA in each sample is used to identify contaminant sequences.
+
+neg_contam <- table(contamdf_freq$contaminant)
+#head(which(contamdf_freq$contaminant)) # which ASVs are being identified as contaminants 
+
+```
+
+Just `r neg_contam[[2]]` out of the `r nrow(contamdf_freq)` ASVs were classified as contaminants. 
+
+<br/>
+
+```{r neg control contam removal, fig.height = 4, fig.width = 6, fig.align = "center"}
+
+# Make phyloseq object of presence-absence in negative controls and true samples
+ps_pa <- transform_sample_counts(ps_clean, function(abund) 1 * (abund > 0)) # transforms the sample counts of a taxa abundance matrix
+ps_pa_neg <- prune_samples(sample_data(ps_pa)$Treatment == "blank_control", ps_pa) # filters samples for controls
+ps_pa_pos <- prune_samples(sample_data(ps_pa)$Treatment != "blank_control", ps_pa) # filters to remove controls
+
+# Make dataframe of prevalence in positive and negative samples
+df_pa <- data.frame(pa_pos = taxa_sums(ps_pa_pos),
+                    pa_neg = taxa_sums(ps_pa_neg),
+                    contaminant = contamdf_freq$contaminant)
+
+# plot prevalence of neg controls against true samples
+ggplot(data = df_pa, aes(x = pa_neg, y = pa_pos, color = contaminant)) +
+  geom_point() +
+  xlab("Prevalence (Negative Controls)") +
+  ylab("Prevalence (True Samples)")
+
+# remove contam taxa from ps_clean:
+ps_clean1 <- prune_taxa(!contamdf_freq$contaminant, ps_clean)
+
+# also remove negative controls, don't need them anymore I think
+ps_cleaner <- subset_samples(ps_clean1, (Treatment != "blank_control"))
+
+ps_cleaner # 3272 taxa left, 36 samples
+
+```
+
+Looks good! We have now cleaned up the sample data to remove contamination from non target organisms and those from the negative controls.
+
+<br/>
+<br/>
+
+
+## Preliminary figures {.tabset}
+
+Before proceeding, we are going to remove the samples that were identified as clones () and those with low reads for the gene expression analysis () to have matching samples. 
+
+```{r remove samples to match GE samples}
+
+# list of samples to keep (removed failed RNA preps, low counts, and clones)
+keep_samples <- c("10aA - 1", "5aC - 2", "10aB - 1", "6D - 1", "5aC - 1", "6B - 2", "5B - 1", "5aE - 1", "2E - 1", "2B - 1", "6B - 1", "10aC - 1", "5aA - 1", "5D - 1", "5C - 1", "10aD - 1", "5C - 2", "2D - 1", "6E - 1")
+
+
+ps_final <- subset_samples(ps_cleaner, (Genotype %in% keep_samples))
+
+```
+
+<br/>
+
+
+### Preliminary figures
+
+Taking phyloseq data and making some preliminary visualizations based on DADA2 tutorial:
+
+```{r pulling top 20 ASVs}
+
+## Modifying the function 
+plot_bar <- function(physeq, x = "Sample", y = "Abundance", fill = NULL, colour = colour, title = NULL, facet_grid = NULL) {
   mdf = psmelt(physeq)
-  p = ggplot(mdf, aes_string(x = x, y = y, fill = fill))
+  p = ggplot(mdf, aes_string(x = x, y = y, fill = fill, colour = fill))
   p = p + geom_bar(stat = "identity", position = "stack")
   p = p + theme(axis.text.x = element_text(angle = -90, hjust = 0))
   if (!is.null(facet_grid)) {
@@ -574,198 +721,112 @@ plot_bar2 <- function (physeq, x = "Sample", y = "Abundance", fill = NULL, colou
   return(p)
 }
 
-
-king_plot <- plot_bar2(ps.top20, x="Treatment", fill = "Kingdom", colour = "Family")
-phy_plot <- plot_bar2(ps.top20, x="Treatment", fill = "Phylum", colour = "Family")
-clas_plot <- plot_bar2(ps.top20, x="Treatment", fill = "Class", colour = "Family")
-order_plot <- plot_bar2(ps.top20, x="Treatment", fill = "Order", colour = "Family")
-fam_plot <- plot_bar2(ps.top20, x="Treatment", fill = "Family", colour = "Family")
-gen_plot <- plot_bar2(ps.top20, x="Treatment", fill = "Genus", colour = "Genus")
-
-library(ggpubr)
-ggarrange(king_plot, phy_plot, clas_plot, order_plot, fam_plot, gen_plot, ncol = 2, nrow = 3)
+## pull top 20 ASVs 
+top20 <- names(sort(taxa_sums(ps_final), decreasing=TRUE))[1:20]
+ps_top20 <- transform_sample_counts(ps_final, function(OTU) OTU/sum(OTU))
+ps_top20 <- prune_taxa(top20, ps_top20)
 
 ```
 
+```{r plot the samples by treatment at Fmaily level, fig.width = 8, fig.height = 6, fig.align = "center"}
 
+## plot top 20 ASVs by family
+barplot <- plot_bar(ps_top20, x = "Genotype", fill = "Family", colour = "Family") + 
+  facet_wrap(~ Treatment, scales = "free_x") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(15)) +
+  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(15)) +
+  ggtitle("Top 20 ASVs at Family level")
 
-```{r eval=FALSE, include=FALSE}
-
-library("dada2")
-library("seqinr")
-library("biomformat")
-library("data.table")
-library("ggplot2")
-# library("ggthemes")
-# library("ampvis2")
-library("cowplot")
-library("phyloseq")
-
-
-# phyloseq object output from Dada2
-ps <- readRDS("Data/phylo.rds")
-seqtab <- readRDS("Data/pylo_sp.rds")
-# sequences object made from Dada2
-
-# exporting sequences to a fasta file for import into qiime
-uniqueSeqs <- as.list(colnames(seqtab))
-write.fasta(uniqueSeqs, uniqueSeqs, "uniqueSeqs.fasta")
-
-# import metadata and merge into phyloseq object
-mapfile = "Acer_microbiome_metadata_NR.txt"
-map = import_qiime_sample_data(mapfile)
-sample_data(ps) <- map
-
-# export .tsv asv_table to import into qiime2
-otu<-t(as(otu_table(ps),"matrix"))
-otu_biom<-make_biom(data=otu)
-write_biom(otu_biom,"ps.biom")
-
-# export taxonomy to import into qiime2
-tax<-as(tax_table(ps),"matrix")
-tax_cols <- c("Kingdom", "Phylum", "Class", "Order","Family","Genus", "Species")
-tax<-as.data.frame(tax)
-tax$taxonomy<-do.call(paste, c(tax[tax_cols], sep=";"))
-for(co in tax_cols) tax[co]<-NULL
-write.table(tax, "taxonomy.txt", quote=FALSE, col.names=FALSE, sep="\t")
-
-# summary of data
-ps
-summary(sample_data(ps))
-
-ntaxa(ps)
-nsamples(ps)
-rank_names(ps)
-sample_names(ps)[1:5]
-sample_variables(ps)
-
-# remove mitochondria and chloroplasts, is.na important becuase if not included
-# this command will also remove all Family = NA or Order = NA
-ps_with_mito = subset_taxa(ps, (Order!="Chloroplast") | is.na(Order))
-ps_no_mito = subset_taxa(ps_with_mito, (Family!="Mitochondria") | is.na(Family))
-ps_no_Eukaryota = subset_taxa(ps_no_mito, (Kingdom!="Eukaryota") | is.na(Kingdom))
-
-ps = ps_no_Eukaryota #lost 71 taxa
-
-#sara's pruning step
-pstax_filt<-filter_taxa(ps,function(x) sum(x>10) > (0.01*length(x)),TRUE)
-
-summary_tab <- data.frame(init=(as.matrix(sample_sums(ps_full)))[,1],
-                           chloros_removed=(as.matrix(sample_sums(ps_with_mito)))[,1],
-                           mitos_removed=(as.matrix(sample_sums(ps_no_mito)))[,1],
-                           euks_removed=(as.matrix(sample_sums(ps_no_Eukaryota)))[,1],
-                           pruned=(as.matrix(sample_sums(pstax_filt)))[,1])
-write.table(summary_tab, "reads_lost_phyloseq.txt", quote=FALSE, col.names=FALSE, sep="\t")
-
-# pst = fast_melt(ps)
-# prevdt = pst[, list(Prevalence = sum(count > 0), 
-#                     TotalCounts = sum(count)),
-#              by = taxaID]
-# keepTaxa = prevdt[(Prevalence >=0 & TotalCounts >15), taxaID]
-# ps_pruned = prune_taxa(keepTaxa,ps)
-# ps_pruned
-# sample_sums(ps_pruned)
-# min(sample_sums(ps_pruned))
-# ps <- ps_pruned
-# save(ps, file = "ps_pruned.RData")
-
-#plot otus by sequencing depth
-observed <- estimate_richness(ps, measures = c('Observed'))
-explore.df <- cbind(observed, sample_sums(ps), sample_data(ps)$Location)
-colnames(explore.df) <- c('Observed', 'Sample_Sums', 'Location')
-observed_mean <- mean(explore.df$Observed)
-sample_sum_mean <- mean(explore.df$Sample_Sums)
-ggplot(data = explore.df, aes(x = Sample_Sums, y = Observed, color = Location)) + 
-  geom_point() +
-  geom_smooth(method="auto", se=TRUE, fullrange=FALSE, level=0.95, 
-              inherit.aes = F, mapping = aes(Sample_Sums, Observed),
-              data = explore.df) +
-  ylab("Observed OTUs") +
-  scale_colour_colorblind()
-
-# Let's use ampvis2 again so we can easily make a rarefaction curve
-
-# Need to convert from phyloseq to ampvis
-av2_otutable <- data.frame(OTU = rownames(t(phyloseq::otu_table(ps)@.Data)),
-                           t(phyloseq::otu_table(ps)@.Data),
-                           phyloseq::tax_table(ps)@.Data,
-                           check.names = F
-)
-
-#Extract metadata from the phyloseq object:
-av2_metadata <- data.frame(phyloseq::sample_data(ps), 
-                           check.names = F
-)
-
-av2_metadata <- cbind(rownames(av2_metadata), av2_metadata)
-
-#Load the data with amp_load:
-av2_obj <- amp_load(av2_otutable, av2_metadata)
-
-# RARE CURVE
-rare_plot_amp <- amp_rarecurve(data = av2_obj, color_by = "Region")
-rare_curve_plot <- rare_plot_amp + ylab('Observed ASVs (count)') + 
-  geom_vline(xintercept=min(sample_sums(ps)), linetype='dashed') +
-  scale_colour_colorblind() +
-  xlim(c(0, 35000))
-plot(rare_plot_amp)
-rare_curve_plot
-
-
-#If we rarefy to 26537
-rare_plot_amp <- amp_rarecurve(data = av2_obj, color_by = "Location")
-rare_curve_plot <- rare_plot_amp + ylab('Observed ASVs (count)') + 
-  geom_vline(xintercept=c(26537), linetype='dashed') +
-  scale_colour_colorblind() +
-  xlim(c(0, 35000))
-#plot(rare_plot_amp)
-rare_curve_plot
-
-summary(explore.df$Sample_Sums)
-length(explore.df$Sample_Sums)
-
-# plot alpha diversity
-plot_richness(ps, x = "Location", color = "Geno", measures = c('Shannon', 'Simpson'))
-
-ps_rarefied <- rarefy_even_depth(ps, sample.size = 26537, rngseed = 999) #546 OTUs removed
-ps_rarefied
-sum(sample_sums(ps_rarefied))
-sample_sums(ps_rarefied)
-
-# # plot alpha diversity
-richness.rare <- cbind(estimate_richness(ps_rarefied, 
-                                          measures = c('Shannon', 'Simpson')),
-                        sample_data(ps_rarefied)$Location)
-colnames(richness.rare) <- c('Shannon', 'Simpson', 'Location')
-richness.rare$Labels <- rownames(richness.rare)
-# 
-ggplot(data = richness.rare, aes(x = Shannon, y = Simpson, color = Location)) + 
-   geom_point()
-
-ggplot(data = richness.rare, aes(x = Shannon, y = (Simpson-1)*-1, color = Location)) + 
-   geom_point() +
-     geom_smooth(method="auto", se=TRUE, fullrange=FALSE, level=0.95, 
-              inherit.aes = F, mapping = aes(Shannon, Simpson),
-                 data = richness.rare) +
-   scale_color_colorblind() +
-   geom_text(aes(label=ifelse(Shannon<1, Labels, ""), hjust=-0.1),
-             show.legend = F) +
-   xlim(c(0,max(richness.rare$Shannon))) +
-   theme_cowplot()
-
-#relative abundance transform
-ps_rel = filter_taxa(ps_rarefied, function(x) mean(x) > 0.1, TRUE)
-ps_rel = transform_sample_counts(ps_rel, function(x) x / sum(x) )
-ps_rel
-
-
-
-# save ps object
-save(ps, file = "ps_unrarefied.RData")
-save(ps_rarefied, file = "ps_rare_acer.RData")
-save(ps_rel, file = "ps_rel.RData")
+ggplotly(barplot)
 
 ```
+
+```{r plot the samples by treatment at Order level, fig.width = 8, fig.height = 6, fig.align = "center"}
+
+## plot top 20 ASVs by order
+barplot_order <- plot_bar(ps_top20, x = "Genotype", fill = "Order", colour = "Order") + 
+  facet_wrap(~ Treatment, scales = "free_x") +
+  theme_bw() +
+  #theme(legend.position = "bottom") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(12)) +
+  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(12)) +
+  ggtitle("Top 20 ASVs at Order level")
+
+ggplotly(barplot_order)
+
+```
+
+```{r plot the samples by treatment at genus level, fig.width = 8, fig.height = 6, fig.align = "center"}
+
+## plot top 20 ASVs by order
+barplot_genus <- plot_bar(ps_top20, x = "Genotype", fill = "Genus", colour = "Genus") + 
+  facet_wrap(~ Treatment, scales = "free_x") +
+  theme_bw() +
+  #theme(legend.position = "bottom") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(15)) +
+  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(15)) +
+  ggtitle("Top 20 ASVs at Genus level")
+
+ggplotly(barplot_genus)
+
+```
+
+<br/>
+<br/>
+
+
+### Principal component analyses
+
+#### All microbiome
+
+```{r}
+
+```
+
+<br/>
+
+
+#### Core microbiome
+
+```{r}
+
+```
+
+<br/>
+
+
+#### Accessory microbiome
+
+```{r}
+
+```
+
+<br/>
+<br/>
+
+
+### Shannon diversity
+
+```{r}
+
+```
+
+<br/>
+<br/>
+
+
+### Simpson diversity
+
+```{r}
+
+```
+
+<br/>
+<br/>
 
 
 ## Session Information
