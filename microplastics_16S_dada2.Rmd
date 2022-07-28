@@ -51,8 +51,17 @@ library(phyloseq)
 library(decontam)
 library(RColorBrewer)
 library(plotly)
+library(vegan)
 
 ```
+
+```{r setup standards}
+
+## Set the treatment colours:
+trt_col <- c("dodgerblue", "darkorange","firebrick2", "firebrick4")
+
+```
+
 
 <br/>
 
@@ -609,10 +618,6 @@ ps_nochlor <- subset_taxa(ps_nomito, (Order != "Chloroplast") | is.na(Order))
 ps_clean <- subset_taxa(ps_nochlor, (Kingdom == "Bacteria"))
 ps_clean
 
-
-# subset for just archaea
-ps_arch <- subset_taxa(ps_nomito, (Kingdom == "Archaea"))
-
 ```
 
 Removal of mitochondira, chloroplasts, and non-bacteria taxa reduced the total number of taxa from `r dim(phylo_sp@otu_table)[[2]]` to `r dim(ps_clean@otu_table)[[2]]`. 
@@ -683,17 +688,162 @@ Looks good! We have now cleaned up the sample data to remove contamination from 
 <br/>
 
 
-## Preliminary figures {.tabset}
+## SECTION TITLE {.tabset}
 
-Before proceeding, we are going to remove the samples that were identified as clones () and those with low reads for the gene expression analysis () to have matching samples. 
+### Blast NCBI
+
+```{r save the sequences to fasta for blast, eval=FALSE, include=FALSE}
+
+## make output fasta file 
+ids <- paste0("sq", seq(1, length(colnames(seqtab_nochim))))
+uniquesToFasta(seqtab_nochim, "Data/acer_cleaned_16s.fasta", ids = ids, mode = "w", width = 20000)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+
+######## Blast ASVs against NCBI
+### This portion was run on the SCC on XXXX and the script can also be found on 'acer_SCC_pipeline_28Jun22.sh' script
+
+```
+
+
+### Rarefy
+
+```{r}
+
+rarecurve(seqtable_no0, step = 100, label = FALSE) # after removing contaminants
+
+total <- rowSums(seqtable_no0)
+toofew <- subset(total, total <9100)
+# no samples to remove here
+
+# do not need to do this since we don't need to remove any low samples
+#row2remove <- c(names(toofew))
+#seqtab_less <- seqtable_no0[!(row.names(seqtable_no0) %in% row2remove),]
+#samdf_rare <- samdf[!(row.names(samdf) %in% row2remove), ]
+
+seqtab_rare <- rrarefy(seqtable_no0, sample=9100)
+
+
+save(seqtab_rare, file = "Data/dada_phylo/seqtab_rare9100.Rdata")
+
+
+rare_zero <- seqtab_rare[,colSums(seqtab_rare) == 0]
+ncol(rare_zero) # 84
+removecols <- c(colnames(rare_zero))
+seqtab_rare_no0 <- seqtab_rare[,!(colnames(seqtab_rare) %in% removecols)]
+
+samdf_rare$year <- as.factor(samdf_rare$year)
+samdf_rare$year <- gsub("16","15",samdf_rare$year)
+samdf_rare$year <- as.factor(samdf_rare$year)
+samdf_rare_nobis <- subset(samdf_rare, transect!="Biscayne")
+ggplot(data.frame(samdf_rare_nobis), aes(x=year)) +
+  geom_bar()
+
+#phyloseq object but rarefied
+ps.sid.rare <- phyloseq(otu_table(seqtab_rare.no0, taxa_are_rows=FALSE), 
+                    sample_data(samdf.sid.rare.nobis), 
+                    tax_table(taxa2))
+ps.sid.rare #24526 taxa after removing 0s, 153 samples after rarefying
+
+#### alpha diversity ####
+#Visualize alpha-diversity - ***Should be done on raw, untrimmed dataset***
+#total species diversity in a landscape (gamma diversity) is determined by two different things, the mean species diversity in sites or habitats at a more local scale (alpha diversity) and the differentiation among those habitats (beta diversity)
+#Shannon:Shannon entropy quantifies the uncertainty (entropy or degree of surprise) associated with correctly predicting which letter will be the next in a diverse string. Based on the weighted geometric mean of the proportional abundances of the types, and equals the logarithm of true diversity. When all types in the dataset of interest are equally common, the Shannon index hence takes the value ln(actual # of types). The more unequal the abundances of the types, the smaller the corresponding Shannon entropy. If practically all abundance is concentrated to one type, and the other types are very rare (even if there are many of them), Shannon entropy approaches zero. When there is only one type in the dataset, Shannon entropy exactly equals zero (there is no uncertainty in predicting the type of the next randomly chosen entity).
+#Simpson:equals the probability that two entities taken at random from the dataset of interest represent the same type. equal to the weighted arithmetic mean of the proportional abundances pi of the types of interest, with the proportional abundances themselves being used as the weights. Since mean proportional abundance of the types increases with decreasing number of types and increasing abundance of the most abundant type, λ obtains small values in datasets of high diversity and large values in datasets of low diversity. This is counterintuitive behavior for a diversity index, so often such transformations of λ that increase with increasing diversity have been used instead. The most popular of such indices have been the inverse Simpson index (1/λ) and the Gini–Simpson index (1 − λ).
+plot_richness(ps.sid, x="transect_zone_year", measures=c("Shannon", "Simpson","Observed"), color="zone") + theme_bw()
+
+df <- data.frame(estimate_richness(ps.sid, split=TRUE, measures=c("Shannon","InvSimpson","Observed")))
+df
+df <- data.frame(estimate_richness(ps.sid.rare, split=TRUE, measures=c("Shannon","InvSimpson","Observed")))
+
+df$sample_16s <- rownames(df)
+df$sample_16s <- gsub("X","",df$sample_16s)
+df.div <- merge(df,samdf.sid.rare,by="sample_16s") #add sample data
+
+write.csv(df,file="fl16s_diversity_sids.csv") #saving
+df.div <- read.csv("fl16s_diversity_sids.csv") #reading back in 
+
+#concatenating 15 with 16
+df.div$year <- gsub("16","15",df.div$year)
+df.div$year <- as.factor(df.div$year)
+df.div.nobis <- subset(df.div,transect!="Biscayne")
+
+quartz()
+#zone
+gg.sh <- ggplot(df.div.nobis, aes(x=zone, y=Shannon,color=zone,shape=zone))+
+  geom_boxplot(outlier.shape=NA)+
+  xlab("Reef zone")+
+  ylab("Shannon diversity")+
+  theme_cowplot()+
+  facet_wrap(~transect*year)
+gg.sh
+  # scale_shape_manual(values=c(16,15),labels=c("Back reef","Fore reef"))+
+  # scale_colour_manual(values=c("#ED7953FF","#8405A7FF"),labels=c("Back reef","Fore reef"))+
+  # #guides(color=guide_legend(title="Reef zone"),shape=guide_legend(title="Reef zone"))+
+  # theme(text=element_text(family="Times"),legend.position="none")+
+  # geom_jitter(alpha=0.5)+
+
+gg.sh <- ggplot(df.div.nobis, aes(x=year,y=Shannon,color=year))+
+  geom_boxplot()+
+  xlab("Year")+
+  ylab("Shannon diversity")+
+  theme_cowplot()+
+  #facet_wrap(~transect)+
+  scale_color_manual(values=c("#781C6D","#F8850F","#AE305C"),name="Time point",labels=c("Baseline","Irma","Post-Irma"))+
+  scale_x_discrete(labels=c("2015","2017","2018"))+
+  theme(axis.text.x=element_text(angle=45,hjust=1))
+quartz()
+gg.sh
+
+gg.si <- ggplot(df.div.nobis, aes(x=transect, y=InvSimpson,color=year,shape=year))+
+  geom_boxplot()+
+  xlab("Reef zone")+
+  ylab("Inv. Simpson diversity")+
+  theme_cowplot()+
+  ylim(0,100)#+
+  #scale_shape_manual(values=c(16,15),labels=c("Back reef","Fore reef"))+
+  #scale_colour_manual(values=c("#ED7953FF","#8405A7FF"),labels=c("Back reef","Fore reef"))+
+  #guides(color=guide_legend(title="Reef zone"),shape=guide_legend(title="Reef zone"))+
+  #theme(text=element_text(family="Times"),legend.position="none")+
+  #geom_jitter(alpha=0.5)#+
+  #facet_wrap(~site)
+gg.si
+
+gg.obs <- ggplot(df.div, aes(x=zone, y=Observed,color=zone,shape=zone))+
+  geom_boxplot(outlier.shape=NA)+
+  xlab("Reef zone")+
+  ylab("Shannon diversity")+
+  theme_cowplot()+
+  scale_shape_manual(values=c(16,15),labels=c("Back reef","Fore reef"))+
+  scale_colour_manual(values=c("#ED7953FF","#8405A7FF"),labels=c("Back reef","Fore reef"))+
+  #guides(color=guide_legend(title="Reef zone"),shape=guide_legend(title="Reef zone"))+
+  theme(text=element_text(family="Times"),legend.position="none")+
+  geom_jitter(alpha=0.5)+
+  facet_wrap(~site)
+gg.obs
+
+```
+
+
+<br/>
+<br/>
+
+
+## Data visualization {.tabset}
 
 ```{r remove samples to match GE samples}
+
+## Before proceeding, we are going to remove the samples that did not successfully prep for gene expression, were identified as clones, and those with low reads for the gene expression analysis to have matching samples. 
+
 
 # list of samples to keep (removed failed RNA preps, low counts, and clones)
 keep_samples <- c("10aA - 1", "5aC - 2", "10aB - 1", "6D - 1", "5aC - 1", "6B - 2", "5B - 1", "5aE - 1", "2E - 1", "2B - 1", "6B - 1", "10aC - 1", "5aA - 1", "5D - 1", "5C - 1", "10aD - 1", "5C - 2", "2D - 1", "6E - 1")
 
 
-ps_final <- subset_samples(ps_cleaner, (Genotype %in% keep_samples))
+# ps_final <- subset_samples(ps_cleaner, (Genotype %in% keep_samples))
+ps_final <- ps_cleaner
 
 ```
 
