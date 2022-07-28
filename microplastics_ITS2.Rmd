@@ -1,0 +1,104 @@
+---
+title: "ITS2 sample processing for *A. cervicornis* microplastics project"
+date: "*Last run on `r format(Sys.time(), '%d %B %Y')`*"
+output: 
+  html_document:
+  theme: flatly
+toc: yes
+toc_depth: 3
+toc_float: yes
+---
+
+```{r set some defaults, echo = FALSE}
+
+library("knitr")
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+pdf.options(useDingbats = FALSE)
+
+```
+
+```{r install packages, eval = FALSE, include = FALSE}
+
+
+```
+
+```{r load packages, echo = FALSE}
+
+library(tidyverse)
+library(janitor)
+library(phyloseq)
+
+```
+
+```{r setup standards}
+
+## Set the treatment colours:
+trt_col <- c("dodgerblue", "darkorange","firebrick2", "firebrick4")
+
+```
+
+
+
+```{r cleaning up its2 file, eval=FALSE, include=FALSE}
+
+df <- read.table("Data/ITS2_data/213_20220723T083504_DBV_20220723T141453.profiles.absolute.abund_and_meta.txt", sep = "\t")[c(-1:-6,-44, -45),-1] %>%
+  row_to_names(row_number = 1)
+
+names(df)[1] <- "sampleID"
+
+write.csv(df, "Data/ITS2_data/ITS2_symportal.csv", row.names = FALSE)
+
+```
+
+```{r read in data}
+
+## read in ITS2 data
+its_df <- read.csv("Data/ITS2_data/ITS2_symportal.csv") %>% 
+  column_to_rownames("sampleID")
+
+## read in the meta data from the samples
+meta <- read.csv("Data/Acerv_MP_Metadata.csv") %>% 
+  column_to_rownames("sampleID") %>% 
+  filter(Treatment != "blank_control") # and remove the neg controls
+
+```
+
+```{r}
+
+#making a taxa table for phyloseq
+taxa <- data.frame(colnames(its_df)) #extract sym data
+
+colnames(taxa) <- c("DIV") #changing the column name to be more user-friendly
+taxa$majority_its2 = c("A3", "A3", "A3", "A3", "B2", "B2")
+taxa$genus <- str_sub(taxa$DIV, 1, 1)
+
+taxa$DIV = as.factor(taxa$DIV)
+taxa$majority_its2 = as.factor(taxa$majority_its2)
+taxa$genus = as.factor(taxa$genus)
+rownames(taxa) <- taxa$DIV
+
+
+taxa_matrix <- as.matrix(taxa) #also has to be a matrix
+ 
+phylo_its2 <- phyloseq(sample_data(meta),
+                       otu_table(its_df, taxa_are_rows = FALSE),
+                       tax_table(taxa_matrix))
+phylo_its2
+
+
+```
+
+
+
+
+## Session Information
+
+All code was written by [Colleen B. Bove](https://colleenbove.science), feel free to contact with questions.
+
+Session information from the last run date on `r format(Sys.time(), '%d %B %Y')`:
+
+```{r print session info}
+
+sessionInfo()
+
+```

@@ -17,7 +17,7 @@ pdf.options(useDingbats = FALSE)
 
 ```
 
-```{r install dada2, eval = FALSE, include = FALSE}
+```{r install packages, eval = FALSE, include = FALSE}
 
 ## Downloading DADA2 following instructions found here:
 # https://benjjneb.github.io/dada2/dada-installation.html
@@ -339,13 +339,13 @@ errR_plot <- plotErrors(errR, nominalQ = TRUE)
 
 
 ## Save the error rates
-save(errF, errR, errF_plot, errR_plot, file = "Data/dada_phylo/dada_errors.Rdata")
+save(errF, errR, errF_plot, errR_plot, file = "Data/16s_data/dada_errors.Rdata")
 
 ```
 
 ```{r load and viz errors, fig.height = 5, fig.width = 7, fig.align = "center"}
 
-load("Data/dada_phylo/dada_errors.Rdata")
+load("Data/16s_data/dada_errors.Rdata")
 
 errF_plot
 
@@ -469,7 +469,7 @@ perc_nochim <- (sum(seqtab_nochim)/sum(seqtab) * 100) # percent non chimera sequ
 
 
 ## Save the chimera-free ASV table to load in downstream analyses
-save(seqtab_nochim, file = "Data/dada_phylo/seqtab_nochim.Rdata")
+save(seqtab_nochim, file = "Data/16s_data/seqtab_nochim.Rdata")
 
 ```
 
@@ -551,7 +551,7 @@ taxa_sp <- addSpecies(taxa, silva_sp_path)
 
 
 ## Save objects to save time running (but will need to rerun if making upstream adjustments)
-save(taxa, taxa_sp, file = "Data/dada_phylo/taxa_assign.Rdata")
+save(taxa, taxa_sp, file = "Data/16s_data/taxa_assign.Rdata")
 
 ```
 
@@ -559,7 +559,7 @@ Let’s inspect the taxonomic assignments:
 
 ```{r load phylo taxa objects and view}
 
-load("Data/dada_phylo/taxa_assign.Rdata")
+load("Data/16s_data/taxa_assign.Rdata")
 
 taxa_print <- taxa_sp # Removing sequence rownames for display only
 rownames(taxa_print) <- NULL
@@ -581,11 +581,11 @@ taxa_names(phylo_sp) <- paste0("ASV", seq(ntaxa(phylo_sp)))
 
 # save a file of the taxa table with ASVs and sequences
 taxtab_seqs <- cbind(data.frame(tax_table(phylo_sp)), seqs_ps)
-write.csv(taxtab_seqs,"Data/dada_phylo/taxatable_withsequences.csv")
+write.csv(taxtab_seqs,"Data/16s_data/taxatable_withsequences.csv")
 
 
 # Save as RDS objects
-save(phylo, phylo_sp, file = "Data/dada_phylo/phylo_objs.Rdata") # save both with and without species level and ASV labeling
+save(phylo, phylo_sp, file = "Data/16s_data/phylo_objs.Rdata") # save both with and without species level and ASV labeling
 
 ```
 
@@ -602,7 +602,7 @@ Great! We can now save this and hand it off to Phyloseq for further analyses.
 ```{r load phylo objects}
 
 ## Load the phyloseq objects created above
-load(file = "Data/dada_phylo/phylo_objs.Rdata")
+load(file = "Data/16s_data/phylo_objs.Rdata")
 
 ```
 
@@ -726,7 +726,7 @@ toofew <- subset(total, total <9100)
 seqtab_rare <- rrarefy(seqtable_no0, sample=9100)
 
 
-save(seqtab_rare, file = "Data/dada_phylo/seqtab_rare9100.Rdata")
+save(seqtab_rare, file = "Data/16s_data/seqtab_rare9100.Rdata")
 
 
 rare_zero <- seqtab_rare[,colSums(seqtab_rare) == 0]
