@@ -25,7 +25,7 @@ pdf.options(useDingbats = FALSE)
 ```{r load packages, echo = FALSE}
 
 library(tidyverse)
-library(janitor)
+
 library(phyloseq)
 
 ```
@@ -52,39 +52,87 @@ write.csv(df, "Data/ITS2_data/ITS2_symportal.csv", row.names = FALSE)
 
 ```{r read in data}
 
+# list of samples to keep (removed failed RNA preps, low counts, and clones)
+keep_samples <- c("10aA - 1", "5aC - 2", "10aB - 1", "6D - 1", "5aC - 1", "6B - 2", "5B - 1", "5aE - 1", "2E - 1", "2B - 1", "6B - 1", "10aC - 1", "5aA - 1", "5D - 1", "5C - 1", "10aD - 1", "5C - 2", "2D - 1", "6E - 1")
+
+
 ## read in ITS2 data
 its_df <- read.csv("Data/ITS2_data/ITS2_symportal.csv") %>% 
-  column_to_rownames("sampleID")
+  column_to_rownames("sampleID") # making first column of sample IDs the rownames
 
 ## read in the meta data from the samples
 meta <- read.csv("Data/Acerv_MP_Metadata.csv") %>% 
-  column_to_rownames("sampleID") %>% 
-  filter(Treatment != "blank_control") # and remove the neg controls
+  column_to_rownames("sampleID") %>% # making first column of sample IDs the rownames
+  filter(Genotype %in% keep_samples) %>% # select for only the GE matching samples (defined above)
+  filter(Treatment != "blank_control") %>% # and remove the neg controls
+  separate(Genotype, c("Genotype", "Frag"), sep = "(?=[A-Z])") 
+
 
 ```
 
 ```{r}
 
-#making a taxa table for phyloseq
+# making a taxa table for phyloseq
 taxa <- data.frame(colnames(its_df)) #extract sym data
 
-colnames(taxa) <- c("DIV") #changing the column name to be more user-friendly
-taxa$majority_its2 = c("A3", "A3", "A3", "A3", "B2", "B2")
+colnames(taxa) <- "DIV" # changing the column name to be more user-friendly
+taxa$majority_its2 <- c("A3", "A3", "A3", "A3", "B2", "B2")
 taxa$genus <- str_sub(taxa$DIV, 1, 1)
 
-taxa$DIV = as.factor(taxa$DIV)
-taxa$majority_its2 = as.factor(taxa$majority_its2)
-taxa$genus = as.factor(taxa$genus)
+taxa$DIV <- as.factor(taxa$DIV)
+taxa$majority_its2 <- as.factor(taxa$majority_its2)
+taxa$genus <- as.factor(taxa$genus)
 rownames(taxa) <- taxa$DIV
 
 
-taxa_matrix <- as.matrix(taxa) #also has to be a matrix
+taxa_matrix <- as.matrix(taxa) # also has to be a matrix
  
 phylo_its2 <- phyloseq(sample_data(meta),
                        otu_table(its_df, taxa_are_rows = FALSE),
                        tax_table(taxa_matrix))
 phylo_its2
 
+```
+
+```{r cal rel abund and save phylo objc}
+
+## Calculate relative abundance per sample
+phylo_its2_rel <- transform_sample_counts(phylo_its2, function(OTU) OTU/sum(OTU))
+
+## plot relative majority ITS2 by treatment
+plot_bar(phylo_its2_rel, x = "Genotype", fill = "majority_its2", colour = "majority_its2")+
+  theme_bw() +
+  facet_wrap(~ Treatment, ncol = 1) +
+  theme(panel.grid = element_blank(), legend.position = "bottom") +
+  labs(x = "", y = "Relative abundance") +
+  scale_color_manual("Majority ITS2", values = c("#81A88D", "#02401B")) +
+  scale_fill_manual( "Majority ITS2", values = c("#81A88D", "#02401B")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 1.01))
+
+## Save both the absolute and relative abundance phyloseq objects
+save(phylo_its2, phylo_its2_rel, file = "Data/ITS2_data/its_phylo_abund.Rdata")
+
+```
+
+```{r}
+
+load(file = "Data/ITS2_data/its_phylo_abund.Rdata")
+
+## Calculate relative majority ITS2 by treatment
+its2_major <- tax_glom(phylo_its2, "majority_its2") # merge samples with same 'majority_its2' rank
+its2_major_rel <- transform_sample_counts(its2_major, function(x) x / sum(x)) # summarize rel abundance 
+its_major_trt <- merge_samples(its2_major_rel, "Treatment") # merge samples with same treatment 
+its_rel_trt <- transform_sample_counts(its_major_trt, function(x) x / sum(x)) # summarize rel abundance 
+its_rel_trt@sam_data[["Treatment"]] <- levels(phylo_its2_rel@sam_data[["Treatment"]]) # need to rename treatment levels
+
+## plot relative majority ITS2 by treatment
+plot_bar(its_rel_trt, x = "Treatment", fill = "majority_its2", colour = "majority_its2")+
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.position = "bottom") +
+  labs(x = "", y = "Relative abundance") +
+  scale_color_manual("Majority ITS2", values = c("#81A88D", "#02401B")) +
+  scale_fill_manual( "Majority ITS2", values = c("#81A88D", "#02401B")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 1.01))
 
 ```
 

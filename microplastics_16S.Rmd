@@ -52,6 +52,7 @@ library(decontam)
 library(RColorBrewer)
 library(plotly)
 library(vegan)
+library(janitor)
 
 ```
 
@@ -155,29 +156,54 @@ primerHits <- function(primer, fn) {
 
 ```{r double check for primers left, eval=FALSE, include=FALSE}
 
-fnFs.filtN <- file.path(path_16S, "filtN", basename(fnFs)) # Put N-filterd files in filtN/ subdirectory
-fnRs.filtN <- file.path(path_16S, "filtN", basename(fnRs))
-filterAndTrim(fnFs, fnFs.filtN, fnRs, fnRs.filtN, maxN = 0, multithread = TRUE)
+## create list of forward/reverse samples from filters
+fnFs_filtN <- file.path(path_16S, "filtN", basename(fnFs)) # Put N-filterd files in filtN/ subdirectory
+fnRs_filtN <- file.path(path_16S, "filtN", basename(fnRs))
+
+## filter/trim the samples
+filterAndTrim(fnFs, fnFs_filtN, fnRs, fnRs_filtN, maxN = 0, multithread = TRUE)
 
 
 #towards the beginning
-rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.filtN[[1]]), 
-      FWD.ReverseReads = sapply(FWD.orients, primerHits, fn = fnRs.filtN[[1]]), 
-      REV.ForwardReads = sapply(REV.orients, primerHits, fn = fnFs.filtN[[1]]), 
-      REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs.filtN[[1]]))
+rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs_filtN[[1]]), 
+      FWD.ReverseReads = sapply(FWD.orients, primerHits, fn = fnRs_filtN[[1]]), 
+      REV.ForwardReads = sapply(REV.orients, primerHits, fn = fnFs_filtN[[1]]), 
+      REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs_filtN[[1]]))
 
 #at the end
-rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.filtN[[4]]), 
-      FWD.ReverseReads = sapply(FWD.orients, primerHits, fn = fnRs.filtN[[4]]), 
-      REV.ForwardReads = sapply(REV.orients, primerHits, fn = fnFs.filtN[[4]]), 
-      REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs.filtN[[4]]))
+rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs_filtN[[4]]), 
+      FWD.ReverseReads = sapply(FWD.orients, primerHits, fn = fnRs_filtN[[4]]), 
+      REV.ForwardReads = sapply(REV.orients, primerHits, fn = fnFs_filtN[[4]]), 
+      REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs_filtN[[4]]))
 
 ```
 
 ```{r remove the extra primers that were left, eval=FALSE, include=FALSE}
 
-fnFs_cut <- file.path(path_16S, "cutadapt", basename(fnFs)) # 16S path with the subdirectory 'cutadapt' then the sample names
-fnRs_cut <- file.path(path_16S, "cutadapt", basename(fnRs))
+## Install cutadapt to local computer and set path here (python3 -m pip install --user --upgrade cutadapt)
+system2("/Users/colleen/Library/Python/3.9/bin/cutadapt", args = "--version")
+
+## look for cutadapt path and create one if it doesn't exist
+path_cut <- file.path(path_16S, "cutadapt")
+if(!dir.exists(path_cut)) dir.create(path_cut)
+
+## create list of forward/reverse samples to put the cutadapt samples
+fnFs_cut <- file.path(path_cut, basename(fnFs)) # 16S path with the subdirectory 'cutadapt' then the sample names
+fnRs_cut <- file.path(path_cut, basename(fnRs))
+
+# forward/reverse complements of primers
+FWD_RC <- dada2:::rc(FWD)
+REV_RC <- dada2:::rc(REV)
+
+R1_flags <- paste("-g", FWD, "-a", REV_RC) # Trim FWD and the reverse-complement of REV off of R1 (forward reads)
+R2_flags <- paste("-G", REV, "-A", FWD_RC) # Trim REV and the reverse-complement of FWD off of R2 (reverse reads)
+
+# Run Cutadapt
+for(i in seq_along(fnFs)) {
+  system2(cutadapt, args = c(R1_flags, R2_flags, "-n", 2, # -n 2 required to remove FWD and REV from reads
+                             "-o", fnFs_cut[i], "-p", fnRs_cut[i], # output files
+                             fnFs_filtN[i], fnRs_filtN[i])) # input files
+}
 
 #towards the beginning
 rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs_cut[[1]]), 
@@ -190,7 +216,6 @@ rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs_cut[[4]]),
       FWD.ReverseReads = sapply(FWD.orients, primerHits, fn = fnRs_cut[[4]]), 
       REV.ForwardReads = sapply(REV.orients, primerHits, fn = fnFs_cut[[4]]), 
       REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs_cut[[4]]))
-
 
 # no more primers were detected after this second cutadapt step
 
