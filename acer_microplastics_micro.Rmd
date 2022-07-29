@@ -90,6 +90,8 @@ trt_col <- c("dodgerblue", "darkorange","firebrick2", "firebrick4")
 
 <br/>
 
+# 16S Assessment
+
 I am largely following the [DADA2](https://www.bioconductor.org/packages/release/bioc/manuals/dada2/man/dada2.pdf) tutorial by Benjamin Callahan that can be found [here](https://benjjneb.github.io/dada2/tutorial.html). 
 
 
@@ -633,7 +635,7 @@ taxtab_seqs <- cbind(data.frame(tax_table(phylo_sp)), seqs_ps)
 write.csv(taxtab_seqs,"Data/16s_data/taxatable_withsequences.csv")
 
 
-# Save as RDS objects
+## Save as RDS objects
 save(phylo, phylo_sp, file = "Data/16s_data/phylo_objs.Rdata") # save both with and without species level and ASV labeling
 
 ```
@@ -749,129 +751,144 @@ uniquesToFasta(seqtab_nochim, "Data/acer_cleaned_16s.fasta", ids = ids, mode = "
 
 ```
 
-```{r eval=FALSE, include=FALSE}
+```{r blast eval=FALSE, include=TRUE}
 
 ######## Blast ASVs against NCBI
 ### This portion was run on the SCC on XXXX and the script can also be found on 'acer_SCC_pipeline_28Jun22.sh' script
 
+
+##------------------------------
+#### Blasting ASVs against NCBI
+## this portion is referenced in the Rmarkdown (microplastics_16S_dada2.Rmd; 'Blast NCBI' section)
+## used 'acer_cleaned_16s.fasta' made in the Rmarkdown file
+##------------------------------
+
+#  ## load blast
+#  module load blast+
+#  
+#  ## write job script for blasting the fasta
+#  nano blast_taxa.sh
+#  
+#  # ---
+#  #!/bin/bash -l
+#  #$ -l h_rt=24:00:00
+#  #$ -cwd # start job in submission directory
+#  #$ -N blastIT # job name, anything you want
+#  #$ -M colleenbove@gmail.com
+#  #$ -m be
+#  
+#  module load blast+
+#  
+#  blastn -query acer_cleaned_16s.fasta -db nt -outfmt "6 std staxids sskingdoms" -evalue 1e-5 -max_target_seqs 5 -out acer_taxids.out -remote
+#  # ---
+#  
+#  ## submit job
+#  qsub -pe omp 28 blast_taxa.sh
+#  # takes a very long time 
+#  
+#  # move file to github repo
+#  scp -r bovec@scc1.bu.edu:/projectnb/davieslab/bove/acer_MP/taxa_scripts/acer_taxids.out /Users/colleen/Dropbox/Git/acer_microplastics/Data/16s_data
+#  
+#  
+#  ##now getting taxonomy info:
+#  
+#  # #download/install taxonkit things, more instructions here:
+#  # #https://bioinf.shenwei.me/taxonkit/usage/
+#  
+#  cd /projectnb/davieslab/bove/taxa
+#  wget -c ftp://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz 
+#  tar -zxvf taxdump.tar.gz
+#  
+#  module load miniconda
+#  conda create --name taxonkit 
+#  conda install -c bioconda taxonkit -p /projectnb/davieslab/bovec/.conda/envs/taxonkit
+#  
+#  cd /projectnb/davieslab/bove/taxa/
+#  cp *.dmp ~/.taxonkit
+#  conda activate taxonkit
+#  # #command taxonkit should work now
+#  
+#  ## extracting taxa ids from blast output for taxonkit:
+#  cd /projectnb/davieslab/bove/acer_MP/taxa_scripts
+#  module load miniconda
+#  conda activate taxonkit
+#  
+#  
+#  awk -F " " '{print $13}' acer_taxids.out > ids
+#  taxonkit lineage ids > ids_tax
+#  cut -f1 acer_taxids.out > ids_seq; paste ids_seq ids_tax > ids_seq_tax
+#  grep "Eukaryota" ids_seq_tax | cut -f1 | sort | uniq > euk_contam_asvs.csv
+#  
+#  
+#  # move file to github repo (Data/16s_data/euk_contam_asvs.csv)
+#  scp -r bovec@scc1.bu.edu:/projectnb/davieslab/bove/acer_MP/taxa_scripts/euk_contam_asvs.csv /Users/colleen/Dropbox/Git/acer_microplastics/Data/16s_data
+
 ```
+
+```{r remove eukaryote contamination}
+
+## read in euk_contam_asvs.csv to remove from ps_cleaner
+# should be 158 to remove
+euks <- read.csv("Data/16s_data/euk_contam_asvs.csv", header = FALSE) %>% 
+  mutate(V1 = gsub("sq", "ASV", V1)) # replace sq with ASV
+euks_names <- euks$V1 # make list from sequence names that are eukaryotes
+
+alltaxa <- taxa_names(ps_cleaner) 
+#length(alltaxa) # 3272 total 
+keepers <- alltaxa[!(alltaxa %in% euks_names)] 
+#length(keepers) # 3230, so that means only 42 euks got through above
+phylo_cleanest <- prune_taxa(keepers, ps_cleaner) 
+# 3230 ASVs in phylo_cleanest
+
+# change taxa names to ASVs
+taxa_names(phylo_cleanest) <- paste0("ASV", seq(ntaxa(phylo_cleanest)))
+
+seqtab_cleanest <- data.frame(otu_table(phylo_cleanest))
+samdf_cleanest <- data.frame(phylo_cleanest@sam_data)
+
+## Save as RDS objects
+save(phylo_cleanest, seqtab_cleanest, samdf_cleanest, file = "Data/16s_data/phylo_clean.Rdata") # save both seqtab and phylo clean objects
+
+```
+
 
 
 ### Rarefy
 
 ```{r eval=FALSE, include=FALSE}
 
-rarecurve(seqtable_no0, step = 100, label = FALSE) # after removing contaminants
+load(file = "Data/16s_data/phylo_clean.Rdata")
 
-total <- rowSums(seqtable_no0)
-toofew <- subset(total, total <9100)
-# no samples to remove here
+S <- specnumber(seqtab_cleanest) # observed number of species
+raremax <- min(rowSums(seqtab_cleanest)) # set the minimum num of ASVs per sample as sample value
+Srar <- rarefy(seqtab_cleanest, raremax)
+seqtab_rare <- rrarefy(seqtab_cleanest, raremax)
 
-# do not need to do this since we don't need to remove any low samples
-#row2remove <- c(names(toofew))
-#seqtab_less <- seqtable_no0[!(row.names(seqtable_no0) %in% row2remove),]
-#samdf_rare <- samdf[!(row.names(samdf) %in% row2remove), ]
+# plot of observed v rarefied # of species
+plot(S, Srar, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
+abline(0, 1)
 
-seqtab_rare <- rrarefy(seqtable_no0, sample=9100)
-
-
-save(seqtab_rare, file = "Data/16s_data/seqtab_rare9100.Rdata")
+# plot the rarefaction curve with the 9404 sample line
+rarecurve(seqtab_cleanest, step = 20, sample = raremax, col = "blue", cex = 0.6) 
 
 
-rare_zero <- seqtab_rare[,colSums(seqtab_rare) == 0]
-ncol(rare_zero) # 84
-removecols <- c(colnames(rare_zero))
-seqtab_rare_no0 <- seqtab_rare[,!(colnames(seqtab_rare) %in% removecols)]
+colnames(seqtab_rare) <- paste0("ASV", seq(1, length(colnames(seqtab_rare))))
+taxa2 <- cbind(taxa_sp, rownames(taxa_sp)) #retaining raw sequence info before renaming
+rownames(taxa2) <- paste0("ASV", seq(1, length(colnames(seqtab_rare))))
 
-samdf_rare$year <- as.factor(samdf_rare$year)
-samdf_rare$year <- gsub("16","15",samdf_rare$year)
-samdf_rare$year <- as.factor(samdf_rare$year)
-samdf_rare_nobis <- subset(samdf_rare, transect!="Biscayne")
-ggplot(data.frame(samdf_rare_nobis), aes(x=year)) +
-  geom_bar()
 
-#phyloseq object but rarefied
-ps.sid.rare <- phyloseq(otu_table(seqtab_rare.no0, taxa_are_rows=FALSE), 
-                    sample_data(samdf.sid.rare.nobis), 
-                    tax_table(taxa2))
-ps.sid.rare #24526 taxa after removing 0s, 153 samples after rarefying
+# phyloseq object but rarefied
+phylo_rare <- phyloseq(otu_table(seqtab_rare, taxa_are_rows = FALSE), 
+               sample_data(samdf_cleanest), 
+               tax_table(taxa))
+phylo_rare #2 346 taxa during revisions
 
-#### alpha diversity ####
-#Visualize alpha-diversity - ***Should be done on raw, untrimmed dataset***
-#total species diversity in a landscape (gamma diversity) is determined by two different things, the mean species diversity in sites or habitats at a more local scale (alpha diversity) and the differentiation among those habitats (beta diversity)
-#Shannon:Shannon entropy quantifies the uncertainty (entropy or degree of surprise) associated with correctly predicting which letter will be the next in a diverse string. Based on the weighted geometric mean of the proportional abundances of the types, and equals the logarithm of true diversity. When all types in the dataset of interest are equally common, the Shannon index hence takes the value ln(actual # of types). The more unequal the abundances of the types, the smaller the corresponding Shannon entropy. If practically all abundance is concentrated to one type, and the other types are very rare (even if there are many of them), Shannon entropy approaches zero. When there is only one type in the dataset, Shannon entropy exactly equals zero (there is no uncertainty in predicting the type of the next randomly chosen entity).
-#Simpson:equals the probability that two entities taken at random from the dataset of interest represent the same type. equal to the weighted arithmetic mean of the proportional abundances pi of the types of interest, with the proportional abundances themselves being used as the weights. Since mean proportional abundance of the types increases with decreasing number of types and increasing abundance of the most abundant type, λ obtains small values in datasets of high diversity and large values in datasets of low diversity. This is counterintuitive behavior for a diversity index, so often such transformations of λ that increase with increasing diversity have been used instead. The most popular of such indices have been the inverse Simpson index (1/λ) and the Gini–Simpson index (1 − λ).
-plot_richness(ps.sid, x="transect_zone_year", measures=c("Shannon", "Simpson","Observed"), color="zone") + theme_bw()
+#removing missing taxa - lost after rarefying
+ps.rare <- prune_taxa(taxa_sums(ps.rare) > 0, ps.rare)
+ps.rare #1947 during revision
 
-df <- data.frame(estimate_richness(ps.sid, split=TRUE, measures=c("Shannon","InvSimpson","Observed")))
-df
-df <- data.frame(estimate_richness(ps.sid.rare, split=TRUE, measures=c("Shannon","InvSimpson","Observed")))
+seqtab.rare <- data.frame(otu_table(ps.rare))
 
-df$sample_16s <- rownames(df)
-df$sample_16s <- gsub("X","",df$sample_16s)
-df.div <- merge(df,samdf.sid.rare,by="sample_16s") #add sample data
-
-write.csv(df,file="fl16s_diversity_sids.csv") #saving
-df.div <- read.csv("fl16s_diversity_sids.csv") #reading back in 
-
-#concatenating 15 with 16
-df.div$year <- gsub("16","15",df.div$year)
-df.div$year <- as.factor(df.div$year)
-df.div.nobis <- subset(df.div,transect!="Biscayne")
-
-quartz()
-#zone
-gg.sh <- ggplot(df.div.nobis, aes(x=zone, y=Shannon,color=zone,shape=zone))+
-  geom_boxplot(outlier.shape=NA)+
-  xlab("Reef zone")+
-  ylab("Shannon diversity")+
-  theme_cowplot()+
-  facet_wrap(~transect*year)
-gg.sh
-  # scale_shape_manual(values=c(16,15),labels=c("Back reef","Fore reef"))+
-  # scale_colour_manual(values=c("#ED7953FF","#8405A7FF"),labels=c("Back reef","Fore reef"))+
-  # #guides(color=guide_legend(title="Reef zone"),shape=guide_legend(title="Reef zone"))+
-  # theme(text=element_text(family="Times"),legend.position="none")+
-  # geom_jitter(alpha=0.5)+
-
-gg.sh <- ggplot(df.div.nobis, aes(x=year,y=Shannon,color=year))+
-  geom_boxplot()+
-  xlab("Year")+
-  ylab("Shannon diversity")+
-  theme_cowplot()+
-  #facet_wrap(~transect)+
-  scale_color_manual(values=c("#781C6D","#F8850F","#AE305C"),name="Time point",labels=c("Baseline","Irma","Post-Irma"))+
-  scale_x_discrete(labels=c("2015","2017","2018"))+
-  theme(axis.text.x=element_text(angle=45,hjust=1))
-quartz()
-gg.sh
-
-gg.si <- ggplot(df.div.nobis, aes(x=transect, y=InvSimpson,color=year,shape=year))+
-  geom_boxplot()+
-  xlab("Reef zone")+
-  ylab("Inv. Simpson diversity")+
-  theme_cowplot()+
-  ylim(0,100)#+
-  #scale_shape_manual(values=c(16,15),labels=c("Back reef","Fore reef"))+
-  #scale_colour_manual(values=c("#ED7953FF","#8405A7FF"),labels=c("Back reef","Fore reef"))+
-  #guides(color=guide_legend(title="Reef zone"),shape=guide_legend(title="Reef zone"))+
-  #theme(text=element_text(family="Times"),legend.position="none")+
-  #geom_jitter(alpha=0.5)#+
-  #facet_wrap(~site)
-gg.si
-
-gg.obs <- ggplot(df.div, aes(x=zone, y=Observed,color=zone,shape=zone))+
-  geom_boxplot(outlier.shape=NA)+
-  xlab("Reef zone")+
-  ylab("Shannon diversity")+
-  theme_cowplot()+
-  scale_shape_manual(values=c(16,15),labels=c("Back reef","Fore reef"))+
-  scale_colour_manual(values=c("#ED7953FF","#8405A7FF"),labels=c("Back reef","Fore reef"))+
-  #guides(color=guide_legend(title="Reef zone"),shape=guide_legend(title="Reef zone"))+
-  theme(text=element_text(family="Times"),legend.position="none")+
-  geom_jitter(alpha=0.5)+
-  facet_wrap(~site)
-gg.obs
 
 ```
 
@@ -1028,7 +1045,7 @@ ggplotly(barplot_genus)
 <br/>
 
 
-## ITS2 Assessment
+# ITS2 Assessment {.tabset}
 
 ```{r cleaning up its2 file, eval=FALSE, include=FALSE}
 
@@ -1078,7 +1095,7 @@ phylo_its2 <- phyloseq(sample_data(meta),
 
 ### Abundance by treatment and genotype
 
-```{r calc rel abund and save phylo objc, fig.height = 6, fig.width = 4, fig.align = "center"}
+```{r calc rel abund and save phylo objc, fig.height = 4, fig.width = 6, fig.align = "center"}
 
 ## Calculate relative abundance per sample
 phylo_its2_rel <- transform_sample_counts(phylo_its2, function(OTU) OTU/sum(OTU))
@@ -1101,13 +1118,15 @@ ggsave("Figures/Supplemental/FigSXX_ITS2_GenxTrt.pdf", height = 4, width = 6, us
 
 ```
 
+**Figure SXX.** Relative abundance of major ITS2 types by coral fragment (x axis) and treatment (facets). Light green represent *Symbiodinium* spp. (A3) and dark green represents *Breviolum* spp. (B2).
+
 <br/>
 <br/>
 
 
 ### Abundance by treatment only
 
-```{r treatment level abundance, fig.height = 6, fig.width = 4, fig.align = "center"}
+```{r treatment level abundance, fig.height = 4, fig.width = 4, fig.align = "center"}
 
 #load(file = "Data/ITS2_data/its_phylo_abund.Rdata")
 
@@ -1131,6 +1150,8 @@ ggsave("Figures/Supplemental/FigSXX_ITS2_treat.png", height = 4, width = 4, dpi 
 ggsave("Figures/Supplemental/FigSXX_ITS2_treat.pdf", height = 4, width = 4, useDingbats = FALSE)
 
 ```
+
+**Figure SXX.** Relative abundance of major ITS2 types grouped by treatment (n = 4-5 corals per treatment). Light green represent *Symbiodinium* spp. (A3) and dark green represents *Breviolum* spp. (B2).
 
 <br/>
 <br/>
