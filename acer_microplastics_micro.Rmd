@@ -63,6 +63,10 @@ BiocManager::install("phyloseq")
 ## used for removing contamination from neg controls
 BiocManager::install("decontam")
 
+
+BiocManager::install("microbiome")
+#remotes::install_github("r-lib/rlang")
+
 ```
 
 ```{r load packages, echo = FALSE}
@@ -77,6 +81,9 @@ library(RColorBrewer)
 library(plotly)
 library(vegan)
 library(janitor)
+library(MCMC.OTU)
+library(ggpubr)
+library(microbiome)
 
 ```
 
@@ -733,13 +740,9 @@ ps_cleaner # 3272 taxa left, 36 samples
 
 ```
 
-Looks good! We have now cleaned up the sample data to remove contamination from non target organisms and those from the negative controls.
-
 <br/>
 <br/>
 
-
-## SECTION TITLE {.tabset}
 
 ### Blast NCBI
 
@@ -751,7 +754,7 @@ uniquesToFasta(seqtab_nochim, "Data/acer_cleaned_16s.fasta", ids = ids, mode = "
 
 ```
 
-```{r blast eval=FALSE, include=TRUE}
+```{r blast, eval=FALSE, include=TRUE}
 
 ######## Blast ASVs against NCBI
 ### This portion was run on the SCC on XXXX and the script can also be found on 'acer_SCC_pipeline_28Jun22.sh' script
@@ -851,47 +854,438 @@ save(phylo_cleanest, seqtab_cleanest, samdf_cleanest, file = "Data/16s_data/phyl
 
 ```
 
+Looks good! We have now cleaned up the sample data to remove contamination from non target organisms and those from the negative controls.
+
+<br/>
+<br/>
 
 
-### Rarefy
+## Rarefy {.tabset}
 
-```{r eval=FALSE, include=FALSE}
+### Rarefy cleaned data
+
+```{r rarefaction plots, fig.align="center"}
 
 load(file = "Data/16s_data/phylo_clean.Rdata")
 
+## 
 S <- specnumber(seqtab_cleanest) # observed number of species
 raremax <- min(rowSums(seqtab_cleanest)) # set the minimum num of ASVs per sample as sample value
-Srar <- rarefy(seqtab_cleanest, raremax)
-seqtab_rare <- rrarefy(seqtab_cleanest, raremax)
+Srar <- rarefy(seqtab_cleanest, raremax) # gives the expected species richness in random subsamples
+seqtab_rare <- rrarefy(seqtab_cleanest, raremax) # generates one randomly rarefied community data frame or vector of given sample size
 
-# plot of observed v rarefied # of species
+# plot of observed v rarefied (expected) # of species
 plot(S, Srar, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
 abline(0, 1)
 
 # plot the rarefaction curve with the 9404 sample line
 rarecurve(seqtab_cleanest, step = 20, sample = raremax, col = "blue", cex = 0.6) 
 
+```
 
-colnames(seqtab_rare) <- paste0("ASV", seq(1, length(colnames(seqtab_rare))))
+```{r rarefied phylo object}
+
+#colnames(seqtab_rare) <- paste0("ASV", seq(1, length(colnames(seqtab_rare))))
 taxa2 <- cbind(taxa_sp, rownames(taxa_sp)) #retaining raw sequence info before renaming
-rownames(taxa2) <- paste0("ASV", seq(1, length(colnames(seqtab_rare))))
+rownames(taxa2) <- paste0("ASV", seq(1, length(rownames(taxa2))))
 
 
 # phyloseq object but rarefied
 phylo_rare <- phyloseq(otu_table(seqtab_rare, taxa_are_rows = FALSE), 
                sample_data(samdf_cleanest), 
-               tax_table(taxa))
-phylo_rare #2 346 taxa during revisions
+               tax_table(taxa2))
+phylo_rare # 3230 taxa 
 
-#removing missing taxa - lost after rarefying
-ps.rare <- prune_taxa(taxa_sums(ps.rare) > 0, ps.rare)
-ps.rare #1947 during revision
+# removing missing taxa - lost after rarefying
+phylo_rare <- prune_taxa(taxa_sums(phylo_rare) > 0, phylo_rare)
+phylo_rare # 3113 after pruning 
 
-seqtab.rare <- data.frame(otu_table(ps.rare))
+seqtab_rare <- data.frame(otu_table(phylo_rare))
 
+
+## Save the rarefied objects
+save(phylo_rare, seqtab_rare, samdf_cleanest, taxa2, file = "Data/16s_data/phylo_rarefy.Rdata")
 
 ```
 
+<br/>
+<br/>
+
+
+### Trim underrepresented OUTs
+
+```{r trim low OUTs}
+
+load(file = "Data/16s_data/phylo_rarefy.Rdata")
+
+#formatting the table for mcmc.otu - requires one first column that's 1 through whatever
+#& has "X" as column name
+nums <- 1:nrow(seqtab_cleanest) 
+samples <- rownames(seqtab_cleanest)
+
+int <- cbind(sample = 0, seqtab_cleanest)
+seq_formcmc <- cbind(X = 0, int)
+
+seq_formcmc$X <- nums
+seq_formcmc$sample <- samples
+
+seq_trim_allinfo <- purgeOutliers(seq_formcmc, count.columns = 3:3232, sampleZcut = -2.5, otu.cut = 0.0001, zero.cut = 0.02)
+# no bad samples identified
+# 257 ASVs pass filters
+
+#remove sample info
+seq_trim <- seq_trim_allinfo[,3:259] 
+
+#write.csv(seq.trim,file="mr16s_seqtab.rev.cleanest.trim.csv")
+#seq.trim <- read.csv("mr16s_seqtab.rev.cleanest.trim.csv",row.names=1)
+
+#remake phyloseq objects
+phylo_trim <- phyloseq(otu_table(seq_trim, taxa_are_rows=FALSE), 
+                         sample_data(samdf_cleanest), 
+                         tax_table(taxa2))
+phylo_trim # 257 asvs
+
+
+## Save the trimmed data
+save(phylo_trim, seq_trim, samdf_cleanest, taxa2, file = "Data/16s_data/phylo_trim.Rdata")
+
+```
+
+<br/>
+<br/>
+
+
+### Rarefy trimmed data
+
+```{r trimmed rarefaction}
+
+load(file = "Data/16s_data/phylo_trim.Rdata")
+
+## Rerunning rarefaction after trimming underrepresented otus and bad samples (is any -- I don't have these)
+
+## pull trimmes OUT table and sample data
+seqtab_trim <- data.frame(phylo_trim@otu_table)
+samdf_trim <- data.frame(phylo_trim@sam_data) # we didn't drop any samples so this is still the same
+
+# plot rarefation curve
+rarecurve(seqtab_trim, step = 20, label = FALSE) 
+
+S_trm <- specnumber(seqtab_trim) # observed number of species
+raremax_trim <- min(rowSums(seqtab_trim)) # set the minimum num of ASVs per sample as sample value
+Srar_trm <- rarefy(seqtab_trim, raremax_trim) # gives the expected species richness in random subsamples
+seqtab_trm_rare <- rrarefy(seqtab_trim, raremax_trim) # generates one randomly rarefied community data frame or vector of given sample size
+
+# plot of observed v rarefied # of species
+plot(S_trm, Srar_trm, xlab = "Observed No. of Species (trimmed)", ylab = "Rarefied No. of Species")
+abline(0, 1)
+
+# plot the rarefaction curve with the 6829 sample line
+rarecurve(seqtab_trim, step = 20, sample = raremax_trim, col = "blue", cex = 0.6, label = FALSE) 
+
+## remove samples that don't meet the rare cutoff
+total <- rowSums(seqtab_trim) # sum row counts per sample
+subset(total, total < raremax_trim) # identify samples that don't meet count cutoff 
+row_rm<- c() # low sample names here
+seqtab_less <- seqtab_trim[!(row.names(seqtab_trim) %in% row_rm),] # filter to remove the low samples
+
+seqtab_trim_rare <- rrarefy(seqtab_less, sample = raremax_trim) # generate one randomly rarefied community data frame or vector of given sample size
+
+# plot the rarefaction curve with the 6829 sample line
+rarecurve(seqtab_trim_rare, step = 20, sample = raremax_trim, col = "blue", cex = 0.6, label = FALSE) 
+
+#phyloseq object but rarefied & trimmed
+phylo_trim_rare <- phyloseq(otu_table(seqtab_trim_rare, taxa_are_rows=FALSE), 
+                    sample_data(samdf_trim), 
+                    tax_table(taxa2))
+phylo_trim_rare # 257 taxa remain
+
+
+## Save the trimmed and rarefied data
+save(phylo_trim_rare, seqtab_trim_rare, samdf_trim, taxa2, file = "Data/16s_data/phylo_trim_rare.Rdata")
+
+```
+
+<br/>
+<br/>
+
+
+## Microbiome diversity analyses {.tabset}
+
+```{r read in sample data}
+
+samdf <- read.csv("Data/Acerv_MP_Metadata.csv")
+row.names(samdf) <- samdf$sampleID
+
+```
+
+```{r read in phyloseq objects, include=FALSE}
+
+### Untrimmed versions
+## Load the cleaned phylo objects
+load(file = "Data/16s_data/phylo_clean.Rdata")
+phylo_cleanest # 3230 cleaned across all 36 samples
+
+## Load the rarefied phylo objects
+load(file = "Data/16s_data/phylo_rarefy.Rdata") # <-- this file also loads the 'taxa2' tax table
+phylo_rare # 3115 rarefied across all 36 samples
+
+
+### Trimmed versions
+## Load the trimmed phylo objects
+load(file = "Data/16s_data/phylo_trim.Rdata")
+phylo_trim # 257 trimmed across all 36 samples
+
+## Load the trimmed and rarefied phylo objects
+load(file = "Data/16s_data/phylo_trim_rare.Rdata")
+phylo_trim_rare # 257 rarefied and trimmed across all 36 samples
+
+```
+
+### Alpha metrics
+
+[Notes from phyloseq author](https://rdrr.io/bioc/phyloseq/man/estimate_richness.html)
+Visualize alpha-diversity - Should be done on raw, untrimmed dataset
+
+```{r generate div metrics}
+
+alpha_df <- data.frame(estimate_richness(phylo_rare, split = TRUE, measures=c("Shannon", "InvSimpson", "Observed")))
+#df <- data.frame(estimate_richness(phylo_cleanest, split=TRUE, measures=c("Shannon","InvSimpson","Observed")))
+#df <- data.frame(estimate_richness(phylo_trim, split=TRUE, measures=c("Shannon","InvSimpson","Observed")))
+#df <- data.frame(estimate_richness(phylo_rare_trim, split=TRUE, measures=c("Shannon","InvSimpson","Observed")))
+
+alpha_df$sampleID <- rownames(alpha_df)
+alpha_df_div <- merge(samdf, alpha_df, by = "sampleID") #add sample data
+
+#shannon diversity divided by species richness
+alpha_df_div$Eveness <- alpha_df_div$Shannon/(log(alpha_df_div$Observed))
+
+alpha_df_div_con <- subset(alpha_df_div, Treatment == "AMB Control")
+alpha_df_div_mp <- subset(alpha_df_div, Treatment == "AMB MP+")
+alpha_df_div_oaw <- subset(alpha_df_div, Treatment == "OAW Control")
+alpha_df_div_trt <- subset(alpha_df_div, Treatment == "OAW MP+")
+
+```
+
+<br/>
+
+#### Simpson diversity
+
+```{r simpson diversity by treatment}
+
+simp_alpha_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment)) +
+  geom_jitter(alpha = 0.8, colour = "lightgrey") +
+  geom_boxplot(fill = NA) +
+  scale_color_manual(values = trt_col) +
+  ylab("Inv. Simpson index") +
+  xlab("Treatment") +
+  theme_bw()
+simp_alpha_plot
+
+```
+
+<br/>
+
+#### Shannon diversity
+
+```{r shannon diversity by treatment}
+
+shan_alpha_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Shannon, color = Treatment)) +
+  geom_jitter(alpha = 0.8, colour = "lightgrey") +
+  geom_boxplot(fill = NA) +
+  scale_color_manual(values = trt_col) +
+  ylab("Shannon index")+
+  xlab("Treatment") +
+  theme_bw() +
+  theme(legend.position = "none", panel.grid = element_blank())
+shan_alpha_plot
+
+```
+
+```{r}
+
+ggarrange(simp_alpha_plot, shan_alpha_plot)
+
+```
+
+
+```{r shannon stats, eval=FALSE, include=FALSE}
+
+
+library(performance)
+
+
+
+#Shannon
+shapiro.test(1/(alpha_df_div$Shannon)) # not normal 
+hist(alpha_df_div$Shannon) # ew
+hist(log(alpha_df_div$Shannon)) # ew
+hist(sqrt(alpha_df_div$Shannon)) # best
+hist((alpha_df_div$Shannon)^(1/3)) # ew
+hist(1/(alpha_df_div$Shannon)) # ew
+
+
+library(car)
+leveneTest(alpha_df_div$Shannon ~ Treatment, data = alpha_df_div) #fine
+
+a_div <- aov(sqrt(Shannon) ~ Treatment, data = alpha_df_div)
+check_model(a_div)
+summary(a_div)
+TukeyHSD(a_div) #ns for rarefied, trimmed, or not
+
+```
+
+<br/>
+<br/>
+
+## Core vs. accessory microbiome {.tabset}
+
+### Core
+
+```{r core}
+
+pseq_core <- core(phylo_trim, detection = 0, prevalence = 0.7)
+pseq_core <- core(phylo_trim_rare, detection = 0, prevalence = 0.7)
+pseq_core # 9 core taxa
+#saving
+#core.tax <- data.frame(pseq_core@tax_table)
+#write.csv(core.tax,"core.taxa.csv")
+
+
+devtools::install_github("awhstin/awtools")
+library(awtools)
+
+ps_glom <- tax_glom(pseq_core, "Genus")
+ps0 <- transform_sample_counts(ps_glom, function(x) x / sum(x))
+ps1 <- merge_samples(ps0, "Treatment")
+ps2 <- transform_sample_counts(ps1, function(x) x / sum(x))
+plot_bar(ps2, fill="Genus")+
+  geom_bar(stat="identity")+
+  theme_bw()+
+  theme(panel.grid = element_blank()) +
+  #scale_fill_brewer(palette = "Dark2")
+  scale_fill_manual(values = c('#017a4a','#FFCE4E','#3d98d3','#7559a2','#ff363c','#794924','#8cdb5e','#d6d6d6','#fb8c00'))
+
+
+
+#ggsave(file="core.bar.pdf",width=8)
+#not rel abun
+plot_ordination(pseq_core,ordinate(pseq_core,"PCoA", "bray"), color="Treatment", shape="Treatment")+
+  stat_ellipse()+
+  theme_bw()+
+  theme(panel.grid = element_blank()) +
+  scale_color_manual(values = trt_col)
+
+
+#rel abun
+pseq_core.rel <- transform_sample_counts(pseq_core, function(x) x / sum(x))
+plot_ordination(pseq_core.rel,ordinate(pseq_core.rel,"PCoA", "bray"),color="Treatment", shape="Treatment")+
+  stat_ellipse()+
+  theme_bw()+
+  theme(panel.grid = element_blank()) +
+  scale_color_manual(values = trt_col)
+
+```
+
+```{r calculate core abundance, eval=FALSE, include=FALSE}
+
+# calculating core abundances #
+core.sqs <- tax_table(pseq_core)
+core.sqs.ids <- row.names(core.sqs)
+core.sqs.ids
+ps.rare.trim.rel <- transform_sample_counts(phylo_trim_rare, function(x) x / sum(x))
+seq.rare.rel <- data.frame(otu_table(ps.rare.trim.rel))
+tax.core <- tax_table(ps.rare.trim.rel)
+seq.core <- seq.rare.rel %>% select(c(core.sqs.ids))
+core.rel <- data.frame(colMeans(seq.core))
+total.rel <- data.frame(colMeans(seq.rare.rel))
+total.rel.ordered <- data.frame(total.rel[order(-total.rel$colMeans.seq.rare.rel.),,drop=FALSE])
+
+```
+
+#### Core stats
+
+```{r core stats, eval=FALSE, include=FALSE}
+seq.core <- data.frame(otu_table(pseq_core))
+seq.core <- data.frame(otu_table(pseq_core.rel))
+dist.core <- vegdist(seq.core)
+samdf.core <- data.frame(sample_data(pseq_core))
+row.names(samdf.core)==row.names(seq.core)
+bet.all <- betadisper(dist.core,samdf.core$zone)
+anova(bet.all)
+plot(bet.all) #very much overlap, not sig
+bet.all <- betadisper(dist.core,samdf.core$site)
+#anova(bet.all)
+permutest(bet.all, pairwise = TRUE, permutations = 999) #MSE & TNW different again
+# Pairwise comparisons:
+# (Observed p-value below diagonal, permuted p-value above diagonal)
+#          MNW      MSE   TNW
+# MNW          0.186000 0.383
+# MSE 0.191245          0.029
+# TNW 0.407966 0.036931      
+plot(bet.all) 
+adonis(seq.core ~ site, data=samdf.core, permutations=999)
+adonis(seq.core ~ site/zone, data=samdf.core, permutations=999)
+adonis(seq.core ~ zone, strata=samdf.core$site,data=samdf.core, permutations=999)
+pairwise.adonis(seq.core, factors = samdf.core$site, permutations = 999)
+#MNW only marginally different than TNW surprisingly
+#RELATIVE ABUNDANCE:
+#        pairs  F.Model         R2 p.value p.adjusted
+# 1 MNW vs MSE 3.573894 0.05804236   0.027      0.027 * 
+# 2 MNW vs TNW 2.252231 0.03617912   0.096      0.096 .
+# 3 MSE vs TNW 7.975852 0.11733361   0.004      0.004 **
+#RAREFIED:
+#MNW only marginally different than TNW surprisingly
+#RELATIVE ABUNDANCE:
+#        pairs  F.Model         R2 p.value p.adjusted
+# 1 MNW vs MSE 3.404324 0.05828891   0.021      0.021 *
+# 2 MNW vs TNW 2.306130 0.04169754   0.090      0.090 . 
+# 3 MSE vs TNW 7.078557 0.11589267   0.004      0.004 **
+```
+
+### Accessory
+
+```{r accessory}
+
+ps.rare.trim.otu <- data.frame(phylo_trim@otu_table)
+#ps.rare.trim.otu <- data.frame(ps.rare.trim@otu_table)
+core.tax <- data.frame(pseq_core@tax_table)
+core.ids <- c(rownames(core.tax))
+ps.rare.trim.acc.otu <- ps.rare.trim.otu[,!colnames(ps.rare.trim.otu) %in% core.ids ]
+row.names(samdf) <- samdf$sampleID
+
+#remake phyloseq object
+ps.acc <- phyloseq(otu_table(ps.rare.trim.acc.otu, taxa_are_rows=FALSE), 
+                         sample_data(samdf[-37:-38,]), 
+                         tax_table(taxa2))
+ps.acc # 248 taxa accessory
+
+plot_ordination(ps.acc,ordinate(ps.acc,"PCoA", "bray"), color="Treatment", shape="Treatment")+
+  stat_ellipse()+
+  theme_bw()+
+  theme(panel.grid = element_blank()) +
+  scale_color_manual(values = trt_col)
+
+```
+
+#### Accessory stats
+
+```{r stats acc}
+
+ps.acc.rel <- transform_sample_counts(ps.acc, function(x) x / sum(x))
+seq.acc <- data.frame(otu_table(ps.acc.rel))
+dist.acc <- vegdist(seq.acc)
+samdf.acc <- data.frame(sample_data(ps.acc))
+row.names(samdf.acc)==row.names(seq.acc)
+bet.all <- betadisper(dist.acc, samdf.acc$Treatment)
+anova(bet.all)
+plot(bet.all) #very much overlap, not sig
+
+
+permutest(bet.all, pairwise = TRUE, permutations = 999) #no diff in disp
+plot(bet.all) 
+adonis(seq.acc ~ Treatment, data=samdf.acc, permutations=999)
+
+```
 
 <br/>
 <br/>
@@ -1001,6 +1395,17 @@ ggplotly(barplot_genus)
 
 ```{r}
 
+full_ord <- ordinate(phylo_trim_rare, "NMDS","bray", autotransform = FALSE, parallel = 48, trymax=10^4, maxit = 10^4)
+
+plot_ordination(phylo_trim_rare, full_ord , color = "Treatment") +  
+  scale_colour_manual(values = trt_col)+
+  geom_point(size=2) +
+  theme_set(theme_bw())+
+  stat_ellipse(aes(fill="Treatment"))+
+  #theme(legend.position = "none")+
+  stat_ellipse(aes(fill="Treatment"))+ theme(text = element_text(family = "Times New Roman",size=12))
+
+
 ```
 
 <br/>
@@ -1043,6 +1448,44 @@ ggplotly(barplot_genus)
 
 <br/>
 <br/>
+
+
+
+
+```{r PIECRUST DO WE NEED, eval=FALSE, include=FALSE}
+
+#### making fasta file for picrust2 - trimmed not rarefied ####
+
+seqtab.trim <- read.csv(file="mr16s_seqtab.rev.cleanest.trim.csv",row.names=1)
+load("taxa2.Rdata")
+samdf <- read.csv(file="mr16s_sampledata_plusneg.csv")
+row.names(samdf) <- samdf$id
+
+phylo_trim <- phyloseq(otu_table(seqtab.trim, taxa_are_rows=FALSE), 
+                         sample_data(samdf), 
+                         tax_table(taxa2))
+phylo_trim #223 taxa during revision
+
+trim.otu <- as.matrix(phylo_trim@otu_table)
+trim.taxa <- data.frame(phylo_trim@tax_table)
+rownames(trim.taxa)==colnames(trim.otu)
+
+colnames(trim.otu) <- trim.taxa$V8
+ids <- rownames(trim.taxa)
+
+path="~/nicfall drive/Moorea_revisions/mr16s_revised/generate_asv_table/mr16s_rev.cleanest.trimmed.fasta"
+uniquesToFasta(trim.otu, path, ids = ids, mode = "w", width = 20000)
+
+#re-formatting seq table so picrust likes it:
+#a tab-delimited table with ASV ids as the first column and sample abundances as all subsequent columns
+seqtab.trim.t <- t(seqtab.trim)
+write.table(seqtab.trim.t,file="mr16s_seqtab.cleanest.trim.t.txt")
+#manually removed the quotation marks that appeared in the file, and converted to tab delimited file from Excel
+
+#### moving on to mr16s_revised_analysis.R script in other folder ####
+
+```
+
 
 
 # ITS2 Assessment {.tabset}
