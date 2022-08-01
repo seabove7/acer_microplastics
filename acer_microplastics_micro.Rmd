@@ -649,16 +649,22 @@ phylo_sp <- phyloseq(otu_table(seqtab_nochim, taxa_are_rows = FALSE),
 # originally, sequences were the taxa names
 seqs_ps <- taxa_names(phylo_sp)
 
-# change taxa names to ASVs
+# add a sequence column to matrix
+taxa2 <- cbind(tax_table(phylo_sp), seqs_ps)
+rownames(taxa2) <- paste0("ASV", seq(ntaxa(phylo_sp))) # rename these rows
+
+# change taxa names to ASVs in the phyloseq object
 taxa_names(phylo_sp) <- paste0("ASV", seq(ntaxa(phylo_sp)))
+
 
 # save a file of the taxa table with ASVs and sequences
 taxtab_seqs <- cbind(data.frame(tax_table(phylo_sp)), seqs_ps)
 write.csv(taxtab_seqs, "Data/16s_data/taxatable_withsequences.csv")
 
 
+
 ## Save as RDS objects
-save(phylo, phylo_sp, file = "Data/16s_data/phylo_objs.Rdata") # save both with and without species level and ASV labeling
+save(phylo, phylo_sp, taxa2, file = "Data/16s_data/phylo_objs.Rdata") # save both with and without species level and ASV labeling
 
 ```
 
@@ -691,9 +697,12 @@ ps_nochlor <- subset_taxa(ps_nomito, (Order != "Chloroplast") | is.na(Order))
 ps_clean <- subset_taxa(ps_nochlor, (Kingdom == "Bacteria"))
 ps_clean
 
+## total number of contam above removed
+contam_tot <- dim(phylo_sp@otu_table)[[2]] - dim(ps_clean@otu_table)[[2]]
+
 ```
 
-Removal of mitochondira, chloroplasts, and non-bacteria taxa reduced the total number of taxa from `r dim(phylo_sp@otu_table)[[2]]` to `r dim(ps_clean@otu_table)[[2]]`. 
+Removal of mitochondira, chloroplasts, and non-bacteria taxa reduced the total number of taxa from `r dim(phylo_sp@otu_table)[[2]]` to `r dim(ps_clean@otu_table)[[2]]` (`r contam_tot` total). 
 
 <br/>
 <br/>
@@ -767,7 +776,7 @@ ps_cleaner # 1607 taxa left, 19 samples
 
 ## make output fasta file 
 ids <- paste0("sq", seq(1, length(colnames(seqtab_nochim))))
-uniquesToFasta(seqtab_nochim, "Data/acer_cleaned_16s.fasta", ids = ids, mode = "w", width = 20000)
+uniquesToFasta(seqtab_nochim, "Data/16s_data/acer_cleaned_16s.fasta", ids = ids, mode = "w", width = 20000)
 
 ```
 
@@ -860,9 +869,6 @@ keepers <- alltaxa[!(alltaxa %in% euks_names)]
 phylo_cleanest <- prune_taxa(keepers, ps_cleaner) 
 # 1538 ASVs in phylo_cleanest
 
-# change taxa names to ASVs
-taxa_names(phylo_cleanest) <- paste0("ASV", seq(ntaxa(phylo_cleanest)))
-
 seqtab_cleanest <- data.frame(otu_table(phylo_cleanest))
 samdf_cleanest <- data.frame(phylo_cleanest@sam_data)
 
@@ -902,15 +908,14 @@ rarecurve(seqtab_cleanest, step = 20, sample = raremax, col = "blue", cex = 0.6)
 
 ```{r rarefied phylo object}
 
-#colnames(seqtab_rare) <- paste0("ASV", seq(1, length(colnames(seqtab_rare))))
-taxa2 <- cbind(taxa_sp, rownames(taxa_sp)) #retaining raw sequence info before renaming
-rownames(taxa2) <- paste0("ASV", seq(1, length(rownames(taxa2))))
+## subset the taxa2 to only have cleaned ASVs
+taxa_clean <- subset(taxa2, rownames(taxa2) %in% colnames(seqtab_rare))
 
 
 # phyloseq object but rarefied
 phylo_rare <- phyloseq(otu_table(seqtab_rare, taxa_are_rows = FALSE), 
                sample_data(samdf_cleanest), 
-               tax_table(taxa2))
+               tax_table(taxa_clean))
 phylo_rare # 1538 taxa 
 
 # removing missing taxa - lost after rarefying
@@ -921,7 +926,7 @@ seqtab_rare <- data.frame(otu_table(phylo_rare))
 
 
 ## Save the rarefied objects
-save(phylo_rare, seqtab_rare, samdf_cleanest, taxa2, file = "Data/16s_data/phylo_rarefy.Rdata")
+save(phylo_rare, seqtab_rare, samdf_cleanest, taxa_clean, file = "Data/16s_data/phylo_rarefy.Rdata")
 
 ```
 
@@ -959,12 +964,12 @@ seq_trim <- seq_trim_allinfo[,3:418]
 #remake phyloseq objects
 phylo_trim <- phyloseq(otu_table(seq_trim, taxa_are_rows=FALSE), 
                          sample_data(samdf_cleanest), 
-                         tax_table(taxa2))
+                         tax_table(taxa_clean))
 phylo_trim # 416 asvs
 
 
 ## Save the trimmed data
-save(phylo_trim, seq_trim, samdf_cleanest, taxa2, file = "Data/16s_data/phylo_trim.Rdata")
+save(phylo_trim, seq_trim, samdf_cleanest, taxa_clean, file = "Data/16s_data/phylo_trim.Rdata")
 
 ```
 
@@ -1013,12 +1018,12 @@ rarecurve(seqtab_trim_rare, step = 20, sample = raremax_trim, col = "blue", cex 
 #phyloseq object but rarefied & trimmed
 phylo_trim_rare <- phyloseq(otu_table(seqtab_trim_rare, taxa_are_rows=FALSE), 
                     sample_data(samdf_trim), 
-                    tax_table(taxa2))
+                    tax_table(taxa_clean))
 phylo_trim_rare # 416 taxa remain
 
 
 ## Save the trimmed and rarefied data
-save(phylo_trim_rare, seqtab_trim_rare, samdf_trim, taxa2, file = "Data/16s_data/phylo_trim_rare.Rdata")
+save(phylo_trim_rare, seqtab_trim_rare, samdf_trim, taxa_clean, file = "Data/16s_data/phylo_trim_rare.Rdata")
 
 ```
 
@@ -1156,171 +1161,341 @@ TukeyHSD(a_div) #ns for rarefied, trimmed, or not
 
 ### Core
 
-```{r core}
+```{r ID core taxa}
 
-pseq_core <- core(phylo_trim, detection = 0, prevalence = 0.7)
-pseq_core <- core(phylo_trim_rare, detection = 0, prevalence = 0.7)
-pseq_core # 11 core taxa
-#saving
-#core.tax <- data.frame(pseq_core@tax_table)
-#write.csv(core.tax,"core.taxa.csv")
+## IDing core taxa from the trimmed, rarefied data (in 70% of samples)
+pseq_core <- core(phylo_trim_rare, detection = 0, prevalence = 0.70)
+pseq_core # 10 core taxa
 
 
 #devtools::install_github("awhstin/awtools")
 library(awtools)
 
-ps_glom <- tax_glom(pseq_core, "Genus")
-ps0 <- transform_sample_counts(ps_glom, function(x) x / sum(x))
-ps1 <- merge_samples(ps0, "Treatment")
-ps2 <- transform_sample_counts(ps1, function(x) x / sum(x))
-plot_bar(ps2, fill="Genus")+
+phylo_core_genus<- tax_glom(pseq_core, "Genus")
+phylo_core_genus_rel <- transform_sample_counts(phylo_core_genus, function(x) x / sum(x))
+phylo_core_trt <- merge_samples(phylo_core_genus_rel, "Treatment")
+phylo_core_trt_rel <- transform_sample_counts(phylo_core_trt, function(x) x / sum(x))
+
+plot_bar(phylo_core_genus_rel, x = "Genotype", fill="Genus", colour="Genus")+
   geom_bar(stat="identity")+
   theme_bw()+
   theme(panel.grid = element_blank()) +
+  facet_wrap(~Treatment, ncol = 2) +
   #scale_fill_brewer(palette = "Dark2")
-  scale_fill_manual(values = c('#017a4a','#FFCE4E','#3d98d3','#7559a2','#ff363c','#8cdb5e','#fb8c00','#794924','#d6d6d6'))
+  scale_fill_manual(values = c('#017a4a','#FFCE4E','#3d98d3','#7559a2','#ff363c','#8cdb5e','#fb8c00','#794924','#d6d6d6')) +
+  scale_colour_manual(values = c('#017a4a','#FFCE4E','#3d98d3','#7559a2','#ff363c','#8cdb5e','#fb8c00','#794924','#d6d6d6'))
 
 
 
-#ggsave(file="core.bar.pdf",width=8)
+
 #not rel abun
-plot_ordination(pseq_core,ordinate(pseq_core,"PCoA", "bray"), color="Treatment", shape="Treatment")+
+pseq_core_ord <-plot_ordination(pseq_core, ordinate(pseq_core,"PCoA", "bray"), color="Treatment", shape="Genotype", justDF = TRUE) 
+eigvec <- ordinate(pseq_core,"PCoA", "bray")$values["Eigenvalues"]
+percvar <- round(100 * eigvec[1:2,]/sum(eigvec), 1)
+
+core_plot <- ggplot(data = pseq_core_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, shape = Genotype, group = Treatment)) +
+  geom_point(color = "black", size = 4) +
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_color_manual(values = trt_col)
+  scale_shape_manual(values=c(21,22,23,24,25)) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  guides(fill = "none") +
+  labs(x = paste0("Axis 1 (", percvar[1], "%)"),
+       y = paste0("Axis 2 (", percvar[2], "%)")) +
+  ggtitle("C.   PCoA of core taxa")
+core_plot
+
 
 
 #rel abun
-pseq_core.rel <- transform_sample_counts(pseq_core, function(x) x / sum(x))
-plot_ordination(pseq_core.rel,ordinate(pseq_core.rel,"PCoA", "bray"),color="Treatment", shape="Treatment")+
+pseq_core_rel <- transform_sample_counts(pseq_core, function(x) x / sum(x))
+pseq_core_rel_ord <-plot_ordination(pseq_core_rel, ordinate(pseq_core_rel,"PCoA", "bray"), color="Treatment", shape="Genotype", justDF = TRUE) 
+eigvec_rel <- ordinate(pseq_core_rel,"PCoA", "bray")$values["Eigenvalues"]
+percvar_rel <- round(100 * eigvec_rel[1:2,]/sum(eigvec_rel), 1)
+
+rel_core_plot <- ggplot(data = pseq_core_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, shape = Genotype, group = Treatment)) +
+  geom_point(color = "black", size = 4) +
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_color_manual(values = trt_col)
+  scale_shape_manual(values=c(21,22,23,24,25)) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  guides(fill = "none") +
+  labs(x = paste0("Axis 1 (", percvar_rel[1], "%)"),
+       y = paste0("Axis 2 (", percvar_rel[2], "%)")) +
+  ggtitle("C.   PCoA of core taxa (relative abundance)")
+rel_core_plot
 
 ```
 
 ```{r calculate core abundance, eval=FALSE, include=FALSE}
 
-# calculating core abundances #
-core.sqs <- tax_table(pseq_core)
-core.sqs.ids <- row.names(core.sqs)
-core.sqs.ids
-ps.rare.trim.rel <- transform_sample_counts(phylo_trim_rare, function(x) x / sum(x))
-seq.rare.rel <- data.frame(otu_table(ps.rare.trim.rel))
-tax.core <- tax_table(ps.rare.trim.rel)
-seq.core <- seq.rare.rel %>% select(c(core.sqs.ids))
-core.rel <- data.frame(colMeans(seq.core))
-total.rel <- data.frame(colMeans(seq.rare.rel))
-total.rel.ordered <- data.frame(total.rel[order(-total.rel$colMeans.seq.rare.rel.),,drop=FALSE])
+## calculating core abundances 
+core_sqs <- tax_table(pseq_core) # pull taxa table (core, trim, rare)
+core_sqs_ids <- rownames(core_sqs) # pull ASV names of the core taxa
+ps_rare_trim_rel <- transform_sample_counts(phylo_trim_rare, function(x) x / sum(x)) # calc rel abund of the rare core
+seq_rare_rel <- data.frame(otu_table(ps_rare_trim_rel)) # make dataframe of the rel phylo object(above) for otus
+tax_core <- tax_table(ps_rare_trim_rel) # pull the taxa table of core
+seq_core <- seq_rare_rel %>% select(c(core_sqs_ids)) # select for the core ASVs only
+core_rel <- data.frame(mean_abun = colMeans(seq_core))
+total_rel <- data.frame(mean_rel = colMeans(seq_rare_rel))
+total_rel_ordered <- data.frame(total_rel[order(-total_rel$mean_rel),,drop = FALSE])
 
 ```
+
+<br/>
 
 #### Core stats
 
-```{r core stats, eval=FALSE, include=FALSE}
-seq.core <- data.frame(otu_table(pseq_core))
-seq.core <- data.frame(otu_table(pseq_core.rel))
-dist.core <- vegdist(seq.core)
-samdf.core <- data.frame(sample_data(pseq_core))
-row.names(samdf.core)==row.names(seq.core)
-bet.all <- betadisper(dist.core,samdf.core$zone)
-anova(bet.all)
-plot(bet.all) #very much overlap, not sig
-bet.all <- betadisper(dist.core,samdf.core$site)
-#anova(bet.all)
-permutest(bet.all, pairwise = TRUE, permutations = 999) #MSE & TNW different again
-# Pairwise comparisons:
-# (Observed p-value below diagonal, permuted p-value above diagonal)
-#          MNW      MSE   TNW
-# MNW          0.186000 0.383
-# MSE 0.191245          0.029
-# TNW 0.407966 0.036931      
-plot(bet.all) 
-adonis(seq.core ~ site, data=samdf.core, permutations=999)
-adonis(seq.core ~ site/zone, data=samdf.core, permutations=999)
-adonis(seq.core ~ zone, strata=samdf.core$site,data=samdf.core, permutations=999)
-pairwise.adonis(seq.core, factors = samdf.core$site, permutations = 999)
-#MNW only marginally different than TNW surprisingly
-#RELATIVE ABUNDANCE:
-#        pairs  F.Model         R2 p.value p.adjusted
-# 1 MNW vs MSE 3.573894 0.05804236   0.027      0.027 * 
-# 2 MNW vs TNW 2.252231 0.03617912   0.096      0.096 .
-# 3 MSE vs TNW 7.975852 0.11733361   0.004      0.004 **
-#RAREFIED:
-#MNW only marginally different than TNW surprisingly
-#RELATIVE ABUNDANCE:
-#        pairs  F.Model         R2 p.value p.adjusted
-# 1 MNW vs MSE 3.404324 0.05828891   0.021      0.021 *
-# 2 MNW vs TNW 2.306130 0.04169754   0.090      0.090 . 
-# 3 MSE vs TNW 7.078557 0.11589267   0.004      0.004 **
+```{r core stats for rare}
+
+### Dispersion stats of core taxa 
+seq_core <- data.frame(otu_table(pseq_core)) # pull the otu table from the core object
+dist_core <- vegdist(seq_core) # calculate Bray-Curtis distances between samples
+samdf_core <- data.frame(sample_data(pseq_core)) # pull sample data from the core phyloseq object
+bet_core <- betadisper(dist_core, samdf_core$Treatment)
+
+# Run the ANOVA
+core_anova <- anova(bet_core)
+core_anova
+plot(bet_core) # plot the treatments and distances to centroids on the
+boxplot(bet_core) # boxplot of the distances to centroid for each treatment
+
+## Dispersion by genotype: not significant 
+#bet_core_gen <- betadisper(dist_core, samdf_core$Genotype)
+#anova(bet_core_gen)
+
+## Test of pairwise (treatment and genotype models)
+#permutest(bet_core, pairwise = TRUE, permutations = 999) # not significant
+#permutest(bet_core_gen, pairwise = TRUE, permutations = 999) # not significant
+    
+
+### Multivariate stats (PERMANOVA)
+core_adonis <- adonis2(seq_core ~ Treatment + Genotype, data = samdf_core, permutations = 1500)
+core_adonis
+
 ```
+
+```{r core stats for rel abund}
+
+## Dispersion stats f core taxa by relative abundance
+seq_core_rel <- data.frame(otu_table(pseq_core_rel))
+dist_core_rel <- vegdist(seq_core_rel) # calculate Bray-Curtis distances between samples
+bet_core_rel <- betadisper(dist_core_rel, samdf_core$Treatment)
+
+# Run the ANOVA
+core_rel_anova <- anova(bet_core_rel)
+core_rel_anova
+plot(bet_core_rel) # plot the treatments and distances to centroids on the
+boxplot(bet_core_rel) # boxplot of the distances to centroid for each treatment
+
+## Dispersion by genotype: not significant 
+#bet_rel_core_gen <- betadisper(dist_core_rel, samdf_core$Genotype)
+#anova(bet_rel_core_gen)
+
+## Test of pairwise (treatment and genotype models)
+#permutest(bet_core_rel, pairwise = TRUE, permutations = 999) # not significant
+#permutest(bet_rel_core_gen, pairwise = TRUE, permutations = 999) # not significant
+    
+
+### Multivariate stats (PERMANOVA)
+core_rel_adonis <- adonis2(seq_core_rel ~ Treatment + Genotype, data = samdf_core, permutations = 1500)
+core_rel_adonis
+
+```
+
+```{r core stat and PCA comparison}
+
+## Add the stats to the core PCA plot (rarefied data)
+core_disp_pval <- substitute(italic(P[disp])==p, list(p = format(core_anova[[1,5]], digits = 2)))
+core_trt_pval <- substitute(italic(P[treat])==p, list(p = format(core_adonis[[1,5]], digits = 2)))
+core_gen_pval <- substitute(italic(P[genotype])==p, list(p = format(core_adonis[[2,5]], digits = 2))) 
+
+core_stat_plot <- core_plot +
+  annotate("text", x = 0.6, y = 0.25, label = deparse(core_disp_pval), parse = TRUE, size = 4) +
+  annotate("text", x = -0.8, y = -0.24, label = deparse(core_trt_pval), parse = TRUE, size = 4) +
+  annotate("text", x = -0.8, y = -0.26, label = deparse(core_gen_pval), parse = TRUE, size = 4) 
+
+
+
+## Add the stats to the core PCA plot (rel abund data)
+rel_core_disp_pval <- substitute(italic(P[disp])==p, list(p = format(core_rel_anova[[1,5]], digits = 2)))
+rel_core_trt_pval <- substitute(italic(P[treat])==p, list(p = format(core_rel_adonis[[1,5]], digits = 2)))
+rel_core_gen_pval <- substitute(italic(P[genotype])==p, list(p = format(core_rel_adonis[[2,5]], digits = 2)))
+
+rel_core_stat_plot <- rel_core_plot +
+  annotate("text", x = -0.6, y = 0.13, label = deparse(rel_core_disp_pval), parse = TRUE, size = 4) +
+  annotate("text", x = 0.7, y = -0.19, label = deparse(rel_core_trt_pval), parse = TRUE, size = 4) +
+  annotate("text", x = 0.7, y = -0.21, label = deparse(rel_core_gen_pval), parse = TRUE, size = 4) 
+
+
+
+### Combine plots and make decision
+ggarrange(core_stat_plot, rel_core_stat_plot, common.legend = TRUE, legend = "bottom")
+
+```
+
 
 ### Accessory
 
-```{r accessory}
+```{r accessory taxa from rare trim}
 
-ps.rare.trim.otu <- data.frame(phylo_trim@otu_table)
-#ps.rare.trim.otu <- data.frame(ps.rare.trim@otu_table)
-core.tax <- data.frame(pseq_core@tax_table)
-core.ids <- c(rownames(core.tax))
-ps.rare.trim.acc.otu <- ps.rare.trim.otu[,!colnames(ps.rare.trim.otu) %in% core.ids ]
-row.names(samdf) <- samdf$sampleID
+ps_rare_trim_otu <- data.frame(phylo_trim_rare@otu_table)
+core_tax <- as.data.frame(tax_table(pseq_core)[,1:6]) # for some reason, the species and seqs columns are preventing the dataframe so cutting them
 
-#remake phyloseq object
-ps.acc <- phyloseq(otu_table(ps.rare.trim.acc.otu, taxa_are_rows=FALSE), 
-                         sample_data(samdf[-37:-38,]), 
-                         tax_table(taxa2))
-ps.acc # 405 taxa accessory
 
-plot_ordination(ps.acc,ordinate(ps.acc,"PCoA", "bray"), color="Treatment", shape="Treatment")+
+core_ids <- c(rownames(core_tax)) # pull ASVs that are core
+ps_rare_trim_acc_otu <- ps_rare_trim_otu[,!colnames(ps_rare_trim_otu) %in% core_ids ] # select for non-core ASVs
+# rownames(samdf_cleanest) <- samdf_cleanest$sampleID # don't think I need this
+
+#r emake phyloseq object with just accessory
+phylo_acc <- phyloseq(otu_table(ps_rare_trim_acc_otu, taxa_are_rows = FALSE), 
+                         sample_data(samdf_cleanest), 
+                         tax_table(taxa_clean))
+phylo_acc # 406 taxa accessory
+
+
+#not rel abun
+phylo_acc_ord <- plot_ordination(phylo_acc, ordinate(phylo_acc,"PCoA", "bray"), color="Treatment", shape="Genotype", justDF = TRUE) 
+eigvec_acc <- ordinate(phylo_acc,"PCoA", "bray")$values["Eigenvalues"]
+percvar_acc <- round(100 * eigvec_acc[1:2,]/sum(eigvec_acc), 1)
+
+acc_plot <- ggplot(data = phylo_acc_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, shape = Genotype, group = Treatment)) +
+  geom_point(color = "black", size = 4) +
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_color_manual(values = trt_col)
+  scale_shape_manual(values=c(21,22,23,24,25)) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  guides(fill = "none") +
+  labs(x = paste0("Axis 1 (", percvar_acc[1], "%)"),
+       y = paste0("Axis 2 (", percvar_acc[2], "%)")) +
+  ggtitle("C.   PCoA of accessory taxa")
+acc_plot
+
+
+
+#rel abun
+phylo_acc_rel <- transform_sample_counts(phylo_acc, function(x) x / sum(x))
+phylo_acc_rel_ord <- plot_ordination(phylo_acc_rel, ordinate(phylo_acc_rel,"PCoA", "bray"), color = "Treatment", shape = "Genotype", justDF = TRUE) 
+eigvec_acc_rel <- ordinate(phylo_acc_rel,"PCoA", "bray")$values["Eigenvalues"]
+percvar_acc_rel <- round(100 * eigvec_acc_rel[1:2,]/sum(eigvec_acc_rel), 1)
+
+rel_acc_plot <- ggplot(data = phylo_acc_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, shape = Genotype, group = Treatment)) +
+  geom_point(color = "black", size = 4) +
+  stat_ellipse()+
+  theme_bw()+
+  theme(panel.grid = element_blank()) +
+  scale_shape_manual(values=c(21,22,23,24,25)) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  guides(fill = "none") +
+  labs(x = paste0("Axis 1 (", percvar_acc_rel[1], "%)"),
+       y = paste0("Axis 2 (", percvar_acc_rel[2], "%)")) +
+  ggtitle("C.   PCoA of accessory taxa (relative abundance)")
 
 ```
 
 #### Accessory stats
 
-```{r stats acc}
+```{r accessory stats for rare}
 
-ps.acc.rel <- transform_sample_counts(ps.acc, function(x) x / sum(x))
-seq.acc <- data.frame(otu_table(ps.acc.rel))
-dist.acc <- vegdist(seq.acc)
-samdf.acc <- data.frame(sample_data(ps.acc))
-row.names(samdf.acc)==row.names(seq.acc)
-bet.all <- betadisper(dist.acc, samdf.acc$Treatment)
-anova(bet.all)
-plot(bet.all) #very much overlap, not sig
+### Dispersion stats of accessory taxa 
+seq_acc <- data.frame(otu_table(phylo_acc)) # pull the otu table from the acc object
+dist_acc <- vegdist(seq_acc) # calculate Bray-Curtis distances between samples
+samdf_acc <- data.frame(sample_data(phylo_acc)) # pull sample data from the acc phyloseq object
+bet_acc <- betadisper(dist_acc, samdf_acc$Treatment)
+
+# Run the ANOVA
+acc_anova <- anova(bet_acc)
+acc_anova
+plot(bet_acc) # plot the treatments and distances to centroids on the
+boxplot(bet_acc) # boxplot of the distances to centroid for each treatment
+
+## Dispersion by genotype: not significant 
+#bet_acc_gen <- betadisper(dist_acc, samdf_acc$Genotype)
+#anova(bet_acc_gen)
+
+## Test of pairwise (treatment and genotype models)
+#permutest(bet_acc, pairwise = TRUE, permutations = 999) # not significant
+#permutest(bet_acc_gen, pairwise = TRUE, permutations = 999) # not significant
 
 
-permutest(bet.all, pairwise = TRUE, permutations = 999) #no diff in disp
-plot(bet.all) 
-adonis(seq.acc ~ Treatment, data=samdf.acc, permutations=999)
+### Multivariate stats (PERMANOVA)
+acc_adonis <- adonis2(seq_acc ~ Treatment + Genotype, data = samdf_acc, permutations = 1500)
+acc_adonis
 
 ```
+
+```{r accessory stats for rel abund}
+
+## Dispersion stats of accessory taxa by relative abundance
+seq_acc_rel <- data.frame(otu_table(phylo_acc_rel))
+dist_acc_rel <- vegdist(seq_acc_rel) # calculate Bray-Curtis distances between samples
+bet_acc_rel <- betadisper(dist_acc_rel, samdf_acc$Treatment)
+
+# Run the ANOVA
+acc_rel_anova <- anova(bet_acc_rel)
+acc_rel_anova
+plot(bet_acc_rel) # plot the treatments and distances to centroids on the
+boxplot(bet_acc_rel) # boxplot of the distances to centroid for each treatment
+
+## Dispersion by genotype: not significant 
+#bet_rel_acc_gen <- betadisper(dist_acc_rel, samdf_acc$Genotype)
+#anova(bet_rel_acc_gen)
+
+## Test of pairwise (treatment and genotype models)
+#permutest(bet_acc_rel, pairwise = TRUE, permutations = 999) # not significant
+#permutest(bet_rel_acc_gen, pairwise = TRUE, permutations = 999) # not significant
+
+
+### Multivariate stats (PERMANOVA)
+acc_rel_adonis <- adonis2(seq_acc_rel ~ Treatment + Genotype, data = samdf_acc, permutations = 1500)
+acc_rel_adonis
+
+```
+
+```{r accessory stat and PCA comparison}
+
+## Add the stats to the acc PCA plot (rarefied data)
+acc_disp_pval <- substitute(italic(P[disp])==p, list(p = format(acc_anova[[1,5]], digits = 2)))
+acc_trt_pval <- substitute(italic(P[treat])==p, list(p = format(acc_adonis[[1,5]], digits = 2)))
+acc_gen_pval <- substitute(italic(P[genotype])==p, list(p = format(acc_adonis[[2,5]], digits = 2))) 
+
+acc_stat_plot <- acc_plot +
+  annotate("text", x = 0.6, y = 0.25, label = deparse(acc_disp_pval), parse = TRUE, size = 4) +
+  annotate("text", x = -0.8, y = -0.24, label = deparse(acc_trt_pval), parse = TRUE, size = 4) +
+  annotate("text", x = -0.8, y = -0.26, label = deparse(acc_gen_pval), parse = TRUE, size = 4) 
+
+
+
+## Add the stats to the acc PCA plot (rel abund data)
+rel_acc_disp_pval <- substitute(italic(P[disp])==p, list(p = format(acc_rel_anova[[1,5]], digits = 2)))
+rel_acc_trt_pval <- substitute(italic(P[treat])==p, list(p = format(acc_rel_adonis[[1,5]], digits = 2)))
+rel_acc_gen_pval <- substitute(italic(P[genotype])==p, list(p = format(acc_rel_adonis[[2,5]], digits = 2)))
+
+rel_acc_stat_plot <- rel_acc_plot +
+  annotate("text", x = -0.6, y = 0.13, label = deparse(rel_acc_disp_pval), parse = TRUE, size = 4) +
+  annotate("text", x = 0.7, y = -0.19, label = deparse(rel_acc_trt_pval), parse = TRUE, size = 4) +
+  annotate("text", x = 0.7, y = -0.21, label = deparse(rel_acc_gen_pval), parse = TRUE, size = 4) 
+
+
+
+### Combine plots and make decision
+ggarrange(acc_stat_plot, rel_acc_stat_plot, common.legend = TRUE, legend = "bottom")
+
+```
+
 
 <br/>
 <br/>
 
 
 ## Data visualization {.tabset}
-
-```{r remove samples to match GE samples}
-
-## Before proceeding, we are going to remove the samples that did not successfully prep for gene expression, were identified as clones, and those with low reads for the gene expression analysis to have matching samples. 
-
-
-# list of samples to keep (removed failed RNA preps, low counts, and clones)
-keep_samples <- c("10aA - 1", "5aC - 2", "10aB - 1", "6D - 1", "5aC - 1", "6B - 2", "5B - 1", "5aE - 1", "2E - 1", "2B - 1", "6B - 1", "10aC - 1", "5aA - 1", "5D - 1", "5C - 1", "10aD - 1", "5C - 2", "2D - 1", "6E - 1")
-
-
-# ps_final <- subset_samples(ps_cleaner, (Genotype %in% keep_samples))
-ps_final <- ps_cleaner
-
-```
 
 <br/>
 
@@ -1402,68 +1577,6 @@ ggplotly(barplot_genus)
 
 <br/>
 <br/>
-
-
-### Principal component analyses
-
-#### All microbiome
-
-```{r eval=FALSE, include=FALSE}
-
-full_ord <- ordinate(phylo_trim_rare, "NMDS","bray", autotransform = FALSE, parallel = 48, trymax=10^4, maxit = 10^4)
-
-plot_ordination(phylo_trim_rare, full_ord , color = "Treatment") +  
-  scale_colour_manual(values = trt_col)+
-  geom_point(size=2) +
-  theme_set(theme_bw())+
-  stat_ellipse(aes(fill="Treatment"))+
-  #theme(legend.position = "none")+
-  stat_ellipse(aes(fill="Treatment"))+ theme(text = element_text(family = "Times New Roman",size=12))
-
-
-```
-
-<br/>
-
-
-#### Core microbiome
-
-```{r}
-
-```
-
-<br/>
-
-
-#### Accessory microbiome
-
-```{r}
-
-```
-
-<br/>
-<br/>
-
-
-### Shannon diversity
-
-```{r}
-
-```
-
-<br/>
-<br/>
-
-
-### Simpson diversity
-
-```{r}
-
-```
-
-<br/>
-<br/>
-
 
 
 
@@ -1564,8 +1677,8 @@ plot_bar(phylo_its2_rel, x = "Genotype", fill = "majority_its2", colour = "major
   facet_wrap(~ Treatment, ncol = 2) +
   theme(panel.grid = element_blank(), legend.position = "bottom", strip.background = element_blank(), strip.text = element_text(face = "bold")) +
   labs(x = "", y = "Relative abundance") +
-  scale_color_manual("Majority ITS2", values = c("#81A88D", "#02401B")) +
-  scale_fill_manual( "Majority ITS2", values = c("#81A88D", "#02401B")) +
+  scale_color_manual("Majority ITS2", values = c("#9e9ac8", "#54278f")) +
+  scale_fill_manual( "Majority ITS2", values = c("#9e9ac8", "#54278f")) +
   scale_y_continuous(expand = c(0, 0), limits = c(0, 1.02))
 
 ggsave("Figures/Supplemental/FigSXX_ITS2_GenxTrt.png", height = 4, width = 6, dpi = 600)
@@ -1600,16 +1713,11 @@ plot_bar(its_rel_trt, x = "Treatment", fill = "majority_its2", colour = "majorit
   theme_bw() +
   theme(panel.grid = element_blank(), legend.position = "bottom") +
   labs(x = "", y = "Relative abundance") +
-  scale_color_manual("Majority ITS2", values = c("#81A88D", "#02401B")) +
-  scale_fill_manual( "Majority ITS2", values = c("#81A88D", "#02401B")) +
+  scale_color_manual("Majority ITS2", values = c("#9e9ac8", "#54278f")) +
+  scale_fill_manual( "Majority ITS2", values = c("#9e9ac8", "#54278f")) +
   scale_y_continuous(expand = c(0, 0), limits = c(0, 1.01))
 
-ggsave("Figures/Supplemental/FigSXX_ITS2_treat.png", height = 4, width = 4, dpi = 600)
-ggsave("Figures/Supplemental/FigSXX_ITS2_treat.pdf", height = 4, width = 4, useDingbats = FALSE)
-
 ```
-
-**Figure SXX.** Relative abundance of major ITS2 types grouped by treatment (n = 4-5 corals per treatment). Light green represent *Symbiodinium* spp. (A3) and dark green represents *Breviolum* spp. (B2).
 
 <br/>
 <br/>
@@ -1619,19 +1727,18 @@ ggsave("Figures/Supplemental/FigSXX_ITS2_treat.pdf", height = 4, width = 4, useD
 
 ## Methods
 
-### Bacterial and Symbiodiniaceae metabarcoding
+### ITS2 and 16S metabarcoding
 
-We characterized the coral microbial and Symbiodiniaceae community composition using 16S and ITS2 metabarcoding, respectively, to target the V4/V5 region following (43). Pooled libraries were sequenced on an Illumina Miseq (paired-end 250 bp) at Tufts Sequencing facility. P
+DNA was extracted using an RNAqueous kit (ThermoFisher Scientific) as described above, except samples were not subjected to the DNA removal step. Internal transcribed spacer region 2 (ITS2) PCR amplification was performed using SYM_VAR_5.8S2 and SYM_VAR_REV primers (as described in Hume et al. 2013, 2015) using the following PCR profile: 26 cycles of 95℃ for 40 s, 59℃ for 2 min, 72℃ for 1 min and a final extension of 72℃ for 7 min. A negative control was included and it failed to amplify so it was not sequenced. PCR products were cleaned using the GeneJET PCR Purification kit (ThermoFisher Scientific) according to the manufacturer’s instructions. A second PCR was performed to dual-barcode samples before pooling, which was done based on the visualization of band intensity on a 1% agarose gel. 20 μl of the pool was run on a 2% SYBR Green gel for 100 min at 70 V. The target band was excised and placed in 30 μl of Milli-Q water overnight at 4℃. The supernatant concentration was measured using a DeNovix DS-11+ Spectrophotometer.   
 
-16S and ITS2 data were pre-processed in bbmap (36) and cutadapt (37) to remove primer sequences. DADA2 (38) truncated reads, calculated error rates, de-duplicated reads, inferred sequence variants, merged paired reads, and removed bimeras (38) (see table SXX for read counts through processing).
-
-
-16S taxonomy was assigned using the Silva v132 dataset (44) and ITS2 taxonomy was assigned through submission to Symportal (CITE). Using phyloseq (41), ASVs assigning to family “Mitochondria”, order “Chloroplast”, or those failing to assign to kingdom “Bacteria” were removed. Using vegan (29), the ASV table was rarefied to 12,000 reads, which retained ~90% of samples (9 samples removed; Table S2). Phyloseq (41) calculated three diversity metrics: ASV richness, Shannon index, and inverse of Simpson’s index. ASV richness and inverse Simpson index were log-transformed and a one-way ANOVA with Tukey HSD tests compared diversity metrics across sites and reef zones. MCMC.OTU (42) then trimmed ASVs representing <0.01% of counts or only present in one sample. Linear regressions assessed correlations between alpha diversity metrics and colony size. Sample dissimilarity was evaluated for the total bacterial community as described for ITS2. These analyses were then repeated on 16S data separated by microbiome (45) into core (present in >70% of samples) and accessory components, and finally repeated using unrarefied, relative ASV abundances to confirm results. 
+The V4 region of the 16S rRNA gene was amplified via PCR using Hyb515f and Hyb806R primers (Parada et al. 2016, Apprill et al. 2015) and the following PCR profile: 30 cycles of 95℃ for 40 s, 63℃ for 2 min, 72℃ for 1 min and a final extension of 7 min. Two negative controls using Milli-Q water were also prepared during the 16S library preparations and these samples were also sequenced. The same procedure as described above for the ITS2 samples was then followed. Concentrations of the ITS2 and 16S pools were used to combine the two pools in a 1:3 ratio respectively. Libraries were sequenced on Illumina MiSeq (paired-end 250 bp) at Tufts Genomics Core Facility. 
 
 
-###  metabarcoding
+### ITS2 and 16S analyses
 
-*Methods text goes here*
+Demultiplexed reads were pre-processed using bbmap (**CITE**) to remove adapters and to split ITS2 and 16S reads based on primers. Resulting ITS2 reads were then analyzed using the SymPortal framework (Hume et al., 2019) by submitting paired fastq.gz files directly to SymPortal. Samples were subjected to standard sequence quality control protocols using MOTHUR 1.39.5 (Schloss et al., 2009), the BLAST+ suite of executables (Camacho et al., 2009), and minimum entropy decomposition (Eren et al., 2015). SymPortal identifies specific sets of defining intragenomic ITS2 sequence variants (DIVs) to define ITS2 type profiles that are indicative of genetically differentiated Symbiodiniaceae taxa (Hume et al., 2019). 
+
+16S primers were removed using cutadapt (**CITE**) and DADA2 (**CITE**) was used to conduct quality filtering and inference of `r dim(phylo_sp@otu_table)[2]` amplicon sequence variants (ASVs) (see Table SXX to track reads lost through filtering). 16S taxonomy was assigned using the Silva v. 138.1 database (**CITE**) and National Center for Biotechnology Information’s nucleotide database using blast+ (**CITE**). ASVs matching mitochondria, chloroplasts, or non-bacterial kingdoms were removed (`r contam_tot` total) and `r neg_contam[[2]]` ASVs were removed based on negative controls as contaminants (*Decontam*; (**CITE**)). Cleaned counts were then rarefied to `r raremax` per sample using vegan (**CITE**), trimmed using MCM.OUT (**CITE**) to remove ASVs present in less than 0.01% of counts, and then rarefied again to `r raremax_trim` resulting in `r dim(phylo_trim_rare@otu_table)[2]` ASVs. **DIVERSITY AND COMMUNITY ANALYSES**
 
 <br/>
 <br/>
@@ -1646,6 +1753,123 @@ We characterized the coral microbial and Symbiodiniaceae community composition u
 
 
 ## Figures
+
+### Figure 4
+
+```{r}
+
+plot_bar(its_rel_trt, x = "Treatment", fill = "majority_its2", colour = "majority_its2")+
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.position = "bottom") +
+  labs(x = "", y = "Relative abundance") +
+  scale_color_manual("Majority ITS2", values = c("#9e9ac8", "#54278f")) +
+  scale_fill_manual( "Majority ITS2", values = c("#9e9ac8", "#54278f")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 1.01))
+
+ggsave("Figures/Fig4_ITS2.png", height = 4, width = 4, dpi = 600)
+ggsave("Figures/Fig4_ITS2.pdf", height = 4, width = 4, useDingbats = FALSE)
+
+```
+
+**Figure 4.** Relative abundance of major ITS2 types grouped by treatment (n = 4-5 corals per treatment). Light green represents *Symbiodinium* (A3) and dark green represents *Breviolum* (B2).
+
+<br/>
+<br/>
+
+
+### Figure 5
+
+```{r fig 5a order barplot}
+
+phylo_core_genus<- tax_glom(pseq_core, "Genus")
+phylo_core_genus_rel <- transform_sample_counts(phylo_core_genus, function(x) x / sum(x))
+phylo_core_trt <- merge_samples(phylo_core_genus_rel, "Treatment")
+phylo_core_trt_rel <- transform_sample_counts(phylo_core_trt, function(x) x / sum(x))
+
+
+## plot top 20 ASVs from XXX phylo object by order
+fig5a <- plot_bar(phylo_core_genus_rel, x = "Genotype", fill="Genus", colour="Genus")+
+  geom_bar(stat="identity")+
+  theme_bw()+
+  theme(panel.grid = element_blank(), legend.position = "bottom", strip.background = element_blank()) +
+  facet_wrap(~Treatment, ncol = 2) +
+  scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
+  scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
+  ggtitle("A.   Core microbial taxa")
+fig5a
+
+```
+
+```{r fig 5b}
+
+```
+
+```{r fig 5c core PCoA}
+
+pseq_core_rel <- transform_sample_counts(pseq_core, function(x) x / sum(x))
+pseq_core_rel_ord <-plot_ordination(pseq_core_rel, ordinate(pseq_core_rel,"PCoA", "bray"), color="Treatment", shape="Genotype", justDF = TRUE) 
+eigvec_rel <- ordinate(pseq_core_rel,"PCoA", "bray")$values["Eigenvalues"]
+percvar_rel <- round(100 * eigvec_rel[1:2,]/sum(eigvec_rel), 1)
+
+
+core_disp_pval <- substitute(italic(P[disp])==p, list(p = format(core_anova[[1,5]], digits = 2)))
+core_pval <- substitute(italic(P)==p, list(p = format(core_adonis[[1,5]], digits = 2)))
+
+
+fig5c <- ggplot(data = pseq_core_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, shape = Genotype, group = Treatment)) +
+  geom_point(color = "black", size = 4) +
+  stat_ellipse()+
+  theme_bw()+
+  theme(panel.grid = element_blank()) +
+  scale_shape_manual(values=c(21,22,23,24,25)) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  guides(fill = "none") +
+  labs(x = paste0("Axis 1 (", percvar_rel[1], "%)"),
+       y = paste0("Axis 2 (", percvar_rel[2], "%)")) +
+  annotate("text", x = 0.7, y = -0.21, label = deparse(core_disp_pval), parse = TRUE, size = 4) +
+  annotate("text", x = 0.7, y = -0.19, label = deparse(core_pval), parse = TRUE, size = 4) +
+  ggtitle("C.   PCoA of core taxa (relative abundance)")
+fig5c
+
+```
+
+```{r fig 5d accessory PCoA}
+
+pseq_core_rel <- transform_sample_counts(pseq_core, function(x) x / sum(x))
+pseq_core_rel_ord <-plot_ordination(pseq_core_rel, ordinate(pseq_core_rel,"PCoA", "bray"), color="Treatment", shape="Genotype", justDF = TRUE) 
+eigvec_rel <- ordinate(pseq_core_rel,"PCoA", "bray")$values["Eigenvalues"]
+percvar_rel <- round(100 * eigvec_rel[1:2,]/sum(eigvec_rel), 1)
+
+fig5d <- ggplot(data = pseq_core_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, shape = Genotype, group = Treatment)) +
+  geom_point(color = "black", size = 4) +
+  stat_ellipse()+
+  theme_bw()+
+  theme(panel.grid = element_blank()) +
+  scale_shape_manual(values=c(21,22,23,24,25)) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  guides(fill = "none") +
+  labs(x = paste0("Axis 1 (", percvar_rel[1], "%)"),
+       y = paste0("Axis 2 (", percvar_rel[2], "%)")) +
+  ggtitle("C.   PCoA of core taxa (relative abundance)")
+fig5d
+
+```
+
+
+```{r full fig 5}
+
+ggarrange(fig5a, fig5b, fig5c, fig5d)
+
+```
+
+
+<br/>
+<br/>
+
+
+### Figure 6
 
 ```{r}
 
