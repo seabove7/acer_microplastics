@@ -67,6 +67,9 @@ BiocManager::install("decontam")
 BiocManager::install("microbiome")
 #remotes::install_github("r-lib/rlang")
 
+
+devtools::install_github("awhstin/awtools")
+
 ```
 
 ```{r load packages, echo = FALSE}
@@ -85,6 +88,11 @@ library(MCMC.OTU)
 library(ggpubr)
 library(microbiome)
 library(Biostrings)
+library(awtools)
+library(performance)
+library(car)
+library(lme4)
+library(patchwork)
 
 ```
 
@@ -92,6 +100,9 @@ library(Biostrings)
 
 ## Set the treatment colours:
 trt_col <- c("dodgerblue", "darkorange","firebrick2", "firebrick4")
+
+## Set genotype shapes:
+gen_shape <- c(21, 22, 23, 24, 25)
 
 ```
 
@@ -1033,10 +1044,14 @@ save(phylo_trim_rare, seqtab_trim_rare, samdf_trim, taxa_clean, file = "Data/16s
 
 ## Microbiome diversity analyses {.tabset}
 
+[Notes from phyloseq author](https://rdrr.io/bioc/phyloseq/man/estimate_richness.html)
+Visualize alpha-diversity - Should be done on raw, untrimmed dataset
+
 ```{r read in sample data}
 
 samdf <- read.csv("Data/Acerv_MP_Metadata.csv") %>% 
-  separate(Genotype, c("Genotype", "Frag"), sep = "(?=[A-Z])") 
+  separate(Genotype, c("Genotype", "Frag"), sep = "(?=[A-Z])") %>% 
+  droplevels()
 row.names(samdf) <- samdf$sampleID
 
 ```
@@ -1064,93 +1079,225 @@ phylo_trim_rare # 257 rarefied and trimmed across all 36 samples
 
 ```
 
-### Alpha metrics
-
-[Notes from phyloseq author](https://rdrr.io/bioc/phyloseq/man/estimate_richness.html)
-Visualize alpha-diversity - Should be done on raw, untrimmed dataset
-
 ```{r generate div metrics}
 
-alpha_df <- data.frame(estimate_richness(phylo_rare, split = TRUE, measures=c("Shannon", "InvSimpson", "Observed")))
-#df <- data.frame(estimate_richness(phylo_cleanest, split=TRUE, measures=c("Shannon","InvSimpson","Observed")))
-#df <- data.frame(estimate_richness(phylo_trim, split=TRUE, measures=c("Shannon","InvSimpson","Observed")))
-#df <- data.frame(estimate_richness(phylo_rare_trim, split=TRUE, measures=c("Shannon","InvSimpson","Observed")))
+alpha_df <- data.frame(estimate_richness(phylo_rare, split = TRUE, measures=c("Shannon", "InvSimpson", "Observed"))) # calculate shannon diversity, simpson, and observed species richness
 
 alpha_df$sampleID <- rownames(alpha_df)
 alpha_df_div <- merge(samdf, alpha_df, by = "sampleID") #add sample data
+alpha_df_div <- alpha_df_div %>% droplevels() # need to drop the blanks
+  
 
-#shannon diversity divided by species richness
-alpha_df_div$Eveness <- alpha_df_div$Shannon/(log(alpha_df_div$Observed))
-
-alpha_df_div_con <- subset(alpha_df_div, Treatment == "AMB Control")
-alpha_df_div_mp <- subset(alpha_df_div, Treatment == "AMB MP+")
-alpha_df_div_oaw <- subset(alpha_df_div, Treatment == "OAW Control")
-alpha_df_div_trt <- subset(alpha_df_div, Treatment == "OAW MP+")
+# shannon diversity divided by species richness (Evenness)
+alpha_df_div$Evenness <- alpha_df_div$Shannon / (log(alpha_df_div$Observed))
 
 ```
 
 <br/>
 
-#### Simpson diversity
+
+### Simpson diversity
 
 ```{r simpson diversity by treatment}
 
-simp_alpha_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment)) +
-  geom_jitter(alpha = 0.8, colour = "lightgrey") +
-  geom_boxplot(fill = NA) +
+simp_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, fill = Treatment)) +
+  geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  scale_shape_manual(values = gen_shape) +
+  guides(fill = "none") +
   ylab("Inv. Simpson index") +
   xlab("Treatment") +
   theme_bw() +
-  theme(panel.grid = element_blank())
-simp_alpha_plot
+  theme(panel.grid = element_blank(), legend.box="vertical")
+simp_plot
+
+```
+
+```{r simpson stats}
+
+## Simpson diversity linear mixed-effects model with a random slope of genotype
+simp_lm <- lmer(InvSimpson ~ Treatment + (1|Genotype), data = alpha_df_div)
+
+# checking the model
+check_normality(simp_lm) # residuals appear normal
+check_heteroscedasticity(simp_lm) # error variance is homoscedastic
+#check_model(simp_lm) # overview: looks meh, but will proceed
+
+# view model significance
+simp_pval <- Anova(simp_lm)
+simp_pval
+summary(simp_lm)
+
+```
+
+```{r add stats to simpson plot}
+
+## Add the stats to the plot
+simp_plot_pval <- substitute(italic(P)==p, list(p = format(simp_pval[[1,3]], digits = 2)))
+
+simp_stat_plot <- simp_plot +
+  annotate("text", x = 1, y = 8, label = deparse(simp_plot_pval), parse = TRUE, size = 4)
 
 ```
 
 <br/>
 
-#### Shannon diversity
+
+### Shannon diversity
 
 ```{r shannon diversity by treatment}
 
-shan_alpha_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Shannon, color = Treatment)) +
-  geom_jitter(alpha = 0.8, colour = "lightgrey") +
-  geom_boxplot(fill = NA) +
+shan_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Shannon, color = Treatment, fill = Treatment)) +
+  geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  scale_shape_manual(values = gen_shape) +
+  guides(fill = "none") +
   ylab("Shannon index")+
   xlab("Treatment") +
   theme_bw() +
-  theme(legend.position = "none", panel.grid = element_blank())
-shan_alpha_plot
+  theme(panel.grid = element_blank(), legend.box="vertical")
+shan_plot
 
 ```
+
+```{r shannon stats}
+
+## Shannon diversity linear mixed-effects model with a random slope of genotype
+shan_lm <- lmer(Shannon ~ Treatment + (1|Genotype), data = alpha_df_div)
+
+# checking the model
+check_normality(shan_lm) # residuals appear normal
+check_heteroscedasticity(shan_lm) # error variance is homoscedastic
+#check_model(shan_lm) # overview: looks meh, but will proceed
+
+# view model significance
+shan_pval <- Anova(shan_lm)
+shan_pval
+summary(shan_lm)
+
+```
+
+```{r add stats to shannon plot}
+
+## Add the stats to the plot
+shan_plot_pval <- substitute(italic(P)==p, list(p = format(shan_pval[[1,3]], digits = 2)))
+
+shan_stat_plot <- shan_plot +
+  annotate("text", x = 1, y = 3, label = deparse(shan_plot_pval), parse = TRUE, size = 4)
+
+```
+
+<br/>
+
+
+### Species richness
+
+```{r richness by treatment}
+
+rich_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Observed, color = Treatment, fill = Treatment)) +
+  geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  scale_shape_manual(values = gen_shape) +
+  guides(fill = "none") +
+  ylab("AVS richness")+
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.box="vertical")
+rich_plot
+
+```
+
+```{r richness stats}
+
+## richness linear model
+# the linear mixed-effects model with a random slope of genotype produced a singular fit so removing genotype
+rich_lm <- lm(log(Observed) ~ Treatment, data = alpha_df_div)  # need to log transform the richness
+
+# checking the model
+check_normality(rich_lm) # residuals not norma;
+check_heteroscedasticity(rich_lm) # error variance is homoscedastic
+#check_model(rich_lm) # overview: looks meh, but will proceed
+
+# view model significance
+rich_pval <- Anova(rich_lm)
+rich_pval
+summary(rich_lm)
+
+```
+
+```{r add stats to richness plot}
+
+## Add the stats to the plot
+rich_plot_pval <- substitute(italic(P)==p, list(p = format(rich_pval[[1,3]], digits = 2)))
+
+rich_stat_plot <- rich_plot +
+  annotate("text", x = 4, y = 175, label = deparse(rich_plot_pval), parse = TRUE, size = 4)
+
+```
+
+<br/>
+
+
+### Evenness
+
+```{r evenness by treatment}
+
+even_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Evenness, color = Treatment, fill = Treatment)) +
+  geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  scale_shape_manual(values = gen_shape) +
+  guides(fill = "none") +
+  ylab("Evenness")+
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.box="vertical")
+even_plot
+
+```
+
+```{r evenness stats}
+
+## Evenness linear mixed-effects model with a random slope of genotype
+even_lm <- lmer(log(Evenness) ~ Treatment + (1|Genotype), data = alpha_df_div)
+
+# checking the model
+check_normality(even_lm) # residuals not norma;
+check_heteroscedasticity(even_lm) # heteroscedasticity detected in regular data so log-transforming
+#check_model(even_lm) # overview: looks meh, but will proceed
+
+# view model significance
+even_pval <- Anova(even_lm)
+even_pval
+summary(even_lm)
+
+```
+
+```{r add stats to evenness plot}
+
+## Add the stats to the plot
+even_plot_pval <- substitute(italic(P)==p, list(p = format(even_pval[[1,3]], digits = 2)))
+
+even_stat_plot <- even_plot +
+  annotate("text", x = 1, y = 0.7, label = deparse(even_plot_pval), parse = TRUE, size = 4)
+
+```
+
+<br/>
+
+
+### All alpha diversity metrics
 
 ```{r}
 
-ggarrange(simp_alpha_plot, shan_alpha_plot, common.legend = TRUE)
-
-```
-
-
-```{r shannon stats, eval=FALSE, include=FALSE}
-
-
-library(performance)
-
-
-
-#Shannon
-shapiro.test((alpha_df_div$Shannon)) # normal-ish
-hist(alpha_df_div$Shannon)
-
-
-library(car)
-leveneTest(alpha_df_div$Shannon ~ Treatment, data = alpha_df_div) #fine
-
-a_div <- aov(Shannon  ~ Treatment + Genotype, data = alpha_df_div)
-check_model(a_div)
-summary(a_div)
-TukeyHSD(a_div) #ns for rarefied, trimmed, or not
+ggarrange(simp_stat_plot, shan_stat_plot, rich_stat_plot, even_stat_plot, common.legend = TRUE)
 
 ```
 
@@ -1158,6 +1305,26 @@ TukeyHSD(a_div) #ns for rarefied, trimmed, or not
 <br/>
 
 ## Core vs. accessory microbiome {.tabset}
+
+```{r updated plot_bar function}
+
+plot_bar2 <- function(physeq, x = "Sample", y = "Abundance", fill = NULL, colour = colour, title = NULL, facet_grid = NULL) {
+  mdf = psmelt(physeq)
+  p = ggplot(mdf, aes_string(x = x, y = y, fill = fill, colour = fill))
+  p = p + geom_bar(stat = "identity", position = "stack")
+  p = p + theme(axis.text.x = element_text(angle = -90, hjust = 0))
+  if (!is.null(facet_grid)) {
+    p <- p + facet_grid(facet_grid)
+  }
+  if (!is.null(title)) {
+    p <- p + ggtitle(title)
+  }
+  return(p)
+}
+
+
+```
+
 
 ### Core
 
@@ -1167,25 +1334,16 @@ TukeyHSD(a_div) #ns for rarefied, trimmed, or not
 pseq_core <- core(phylo_trim_rare, detection = 0, prevalence = 0.70)
 pseq_core # 10 core taxa
 
-
-#devtools::install_github("awhstin/awtools")
-library(awtools)
-
 phylo_core_genus<- tax_glom(pseq_core, "Genus")
 phylo_core_genus_rel <- transform_sample_counts(phylo_core_genus, function(x) x / sum(x))
 phylo_core_trt <- merge_samples(phylo_core_genus_rel, "Treatment")
 phylo_core_trt_rel <- transform_sample_counts(phylo_core_trt, function(x) x / sum(x))
 
-plot_bar(phylo_core_genus_rel, x = "Genotype", fill="Genus", colour="Genus")+
-  geom_bar(stat="identity")+
-  theme_bw()+
-  theme(panel.grid = element_blank()) +
-  facet_wrap(~Treatment, ncol = 2) +
-  #scale_fill_brewer(palette = "Dark2")
-  scale_fill_manual(values = c('#017a4a','#FFCE4E','#3d98d3','#7559a2','#ff363c','#8cdb5e','#fb8c00','#794924','#d6d6d6')) +
-  scale_colour_manual(values = c('#017a4a','#FFCE4E','#3d98d3','#7559a2','#ff363c','#8cdb5e','#fb8c00','#794924','#d6d6d6'))
-
-
+plot_bar2(phylo_core_genus_rel, x = "Genotype", fill="Genus", colour="Genus")+
+ geom_bar(stat="identity")+
+ theme_bw()+
+ theme(panel.grid = element_blank()) +
+ facet_wrap(~Treatment, ncol = 2)
 
 
 #not rel abun
@@ -1198,15 +1356,14 @@ core_plot <- ggplot(data = pseq_core_ord, aes(x = Axis.1, y = Axis.2, colour = T
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_shape_manual(values=c(21,22,23,24,25)) +
+  scale_shape_manual(values = gen_shape) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
   guides(fill = "none") +
   labs(x = paste0("Axis 1 (", percvar[1], "%)"),
        y = paste0("Axis 2 (", percvar[2], "%)")) +
-  ggtitle("C.   PCoA of core taxa")
+  ggtitle("C.   Core taxa")
 core_plot
-
 
 
 #rel abun
@@ -1220,13 +1377,13 @@ rel_core_plot <- ggplot(data = pseq_core_rel_ord, aes(x = Axis.1, y = Axis.2, co
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_shape_manual(values=c(21,22,23,24,25)) +
+  scale_shape_manual(values = gen_shape) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
   guides(fill = "none") +
   labs(x = paste0("Axis 1 (", percvar_rel[1], "%)"),
        y = paste0("Axis 2 (", percvar_rel[2], "%)")) +
-  ggtitle("C.   PCoA of core taxa (relative abundance)")
+  ggtitle("C.   Core taxa (relative abundance)")
 rel_core_plot
 
 ```
@@ -1368,13 +1525,13 @@ acc_plot <- ggplot(data = phylo_acc_ord, aes(x = Axis.1, y = Axis.2, colour = Tr
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_shape_manual(values=c(21,22,23,24,25)) +
+  scale_shape_manual(values = gen_shape) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
   guides(fill = "none") +
   labs(x = paste0("Axis 1 (", percvar_acc[1], "%)"),
        y = paste0("Axis 2 (", percvar_acc[2], "%)")) +
-  ggtitle("C.   PCoA of accessory taxa")
+  ggtitle("D.   Accessory taxa")
 acc_plot
 
 
@@ -1390,13 +1547,13 @@ rel_acc_plot <- ggplot(data = phylo_acc_rel_ord, aes(x = Axis.1, y = Axis.2, col
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_shape_manual(values=c(21,22,23,24,25)) +
+  scale_shape_manual(values = gen_shape) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
   guides(fill = "none") +
   labs(x = paste0("Axis 1 (", percvar_acc_rel[1], "%)"),
        y = paste0("Axis 2 (", percvar_acc_rel[2], "%)")) +
-  ggtitle("C.   PCoA of accessory taxa (relative abundance)")
+  ggtitle("D.   Accessory taxa (relative abundance)")
 
 ```
 
@@ -1490,95 +1647,8 @@ ggarrange(acc_stat_plot, rel_acc_stat_plot, common.legend = TRUE, legend = "bott
 
 ```
 
-
 <br/>
 <br/>
-
-
-## Data visualization {.tabset}
-
-<br/>
-
-
-### Preliminary figures
-
-Taking phyloseq data and making some preliminary visualizations based on DADA2 tutorial:
-
-```{r pulling top 20 ASVs}
-
-## Modifying the function 
-plot_bar <- function(physeq, x = "Sample", y = "Abundance", fill = NULL, colour = colour, title = NULL, facet_grid = NULL) {
-  mdf = psmelt(physeq)
-  p = ggplot(mdf, aes_string(x = x, y = y, fill = fill, colour = fill))
-  p = p + geom_bar(stat = "identity", position = "stack")
-  p = p + theme(axis.text.x = element_text(angle = -90, hjust = 0))
-  if (!is.null(facet_grid)) {
-    p <- p + facet_grid(facet_grid)
-  }
-  if (!is.null(title)) {
-    p <- p + ggtitle(title)
-  }
-  return(p)
-}
-
-## pull top 20 ASVs 
-top20 <- names(sort(taxa_sums(phylo_cleanest), decreasing=TRUE))[1:20]
-ps_top20 <- transform_sample_counts(phylo_cleanest, function(OTU) OTU/sum(OTU))
-ps_top20 <- prune_taxa(top20, ps_top20)
-
-```
-
-```{r plot the samples by treatment at Fmaily level, fig.width = 8, fig.height = 6, fig.align = "center"}
-
-## plot top 20 ASVs by family
-barplot <- plot_bar(ps_top20, x = "Genotype", fill = "Family", colour = "Family") + 
-  facet_wrap(~ Treatment, scales = "free_x") +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(15)) +
-  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(15)) +
-  ggtitle("Top 20 ASVs at Family level")
-
-ggplotly(barplot)
-
-```
-
-```{r plot the samples by treatment at Order level, fig.width = 8, fig.height = 6, fig.align = "center"}
-
-## plot top 20 ASVs by order
-barplot_order <- plot_bar(ps_top20, x = "Genotype", fill = "Order", colour = "Order") + 
-  facet_wrap(~ Treatment, scales = "free_x") +
-  theme_bw() +
-  #theme(legend.position = "bottom") +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(12)) +
-  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(12)) +
-  ggtitle("Top 20 ASVs at Order level")
-
-ggplotly(barplot_order)
-
-```
-
-```{r plot the samples by treatment at genus level, fig.width = 8, fig.height = 6, fig.align = "center"}
-
-## plot top 20 ASVs by order
-barplot_genus <- plot_bar(ps_top20, x = "Genotype", fill = "Genus", colour = "Genus") + 
-  facet_wrap(~ Treatment, scales = "free_x") +
-  theme_bw() +
-  #theme(legend.position = "bottom") +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(15)) +
-  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "Set2"))(15)) +
-  ggtitle("Top 20 ASVs at Genus level")
-
-ggplotly(barplot_genus)
-
-```
-
-<br/>
-<br/>
-
-
 
 ```{r PIECRUST DO WE NEED, eval=FALSE, include=FALSE}
 
@@ -1672,7 +1742,7 @@ phylo_its2 <- phyloseq(sample_data(meta),
 phylo_its2_rel <- transform_sample_counts(phylo_its2, function(OTU) OTU/sum(OTU))
 
 ## plot relative majority ITS2 by treatment
-plot_bar(phylo_its2_rel, x = "Genotype", fill = "majority_its2", colour = "majority_its2")+
+plot_bar2(phylo_its2_rel, x = "Genotype", fill = "majority_its2", colour = "majority_its2")+
   theme_bw() +
   facet_wrap(~ Treatment, ncol = 2) +
   theme(panel.grid = element_blank(), legend.position = "bottom", strip.background = element_blank(), strip.text = element_text(face = "bold")) +
@@ -1709,7 +1779,7 @@ its_rel_trt <- transform_sample_counts(its_major_trt, function(x) x / sum(x)) # 
 its_rel_trt@sam_data[["Treatment"]] <- levels(phylo_its2_rel@sam_data[["Treatment"]]) # need to rename treatment levels
 
 ## plot relative majority ITS2 by treatment
-plot_bar(its_rel_trt, x = "Treatment", fill = "majority_its2", colour = "majority_its2")+
+plot_bar2(its_rel_trt, x = "Treatment", fill = "majority_its2", colour = "majority_its2")+
   theme_bw() +
   theme(panel.grid = element_blank(), legend.position = "bottom") +
   labs(x = "", y = "Relative abundance") +
@@ -1756,9 +1826,9 @@ Demultiplexed reads were pre-processed using bbmap (**CITE**) to remove adapters
 
 ### Figure 4
 
-```{r}
+```{r figure 4, fig.height = 4, fig.width = 4}
 
-plot_bar(its_rel_trt, x = "Treatment", fill = "majority_its2", colour = "majority_its2")+
+plot_bar2(its_rel_trt, x = "Treatment", fill = "majority_its2", colour = "majority_its2")+
   theme_bw() +
   theme(panel.grid = element_blank(), legend.position = "bottom") +
   labs(x = "", y = "Relative abundance") +
@@ -1788,82 +1858,65 @@ phylo_core_trt_rel <- transform_sample_counts(phylo_core_trt, function(x) x / su
 
 
 ## plot top 20 ASVs from XXX phylo object by order
-fig5a <- plot_bar(phylo_core_genus_rel, x = "Genotype", fill="Genus", colour="Genus")+
+fig5a <- plot_bar2(phylo_core_genus_rel, x = "Genotype", fill="Genus", colour="Genus")+
   geom_bar(stat="identity")+
   theme_bw()+
-  theme(panel.grid = element_blank(), legend.position = "bottom", strip.background = element_blank()) +
+  theme(panel.grid = element_blank(), legend.position = "right", strip.background = element_blank()) +
   facet_wrap(~Treatment, ncol = 2) +
   scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
   scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
   ggtitle("A.   Core microbial taxa")
-fig5a
 
 ```
 
-```{r fig 5b}
+```{r fig 5b shannon diversity}
+
+## Sannon diversity plot from above
+fig5b <- shan_plot +
+  annotate("text", x = 1.1, y = 3.4, label = deparse(shan_plot_pval), parse = TRUE, size = 3) +
+  ggtitle("B.   Shannon Diversity") +
+  theme(legend.position = "none", axis.text.x = element_blank(), axis.title = element_blank())
 
 ```
 
 ```{r fig 5c core PCoA}
 
-pseq_core_rel <- transform_sample_counts(pseq_core, function(x) x / sum(x))
-pseq_core_rel_ord <-plot_ordination(pseq_core_rel, ordinate(pseq_core_rel,"PCoA", "bray"), color="Treatment", shape="Genotype", justDF = TRUE) 
-eigvec_rel <- ordinate(pseq_core_rel,"PCoA", "bray")$values["Eigenvalues"]
-percvar_rel <- round(100 * eigvec_rel[1:2,]/sum(eigvec_rel), 1)
-
-
-core_disp_pval <- substitute(italic(P[disp])==p, list(p = format(core_anova[[1,5]], digits = 2)))
-core_pval <- substitute(italic(P)==p, list(p = format(core_adonis[[1,5]], digits = 2)))
-
-
-fig5c <- ggplot(data = pseq_core_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, shape = Genotype, group = Treatment)) +
-  geom_point(color = "black", size = 4) +
-  stat_ellipse()+
-  theme_bw()+
-  theme(panel.grid = element_blank()) +
-  scale_shape_manual(values=c(21,22,23,24,25)) +
-  scale_color_manual(values = trt_col) +
-  scale_fill_manual(values = trt_col) +
-  guides(fill = "none") +
-  labs(x = paste0("Axis 1 (", percvar_rel[1], "%)"),
-       y = paste0("Axis 2 (", percvar_rel[2], "%)")) +
-  annotate("text", x = 0.7, y = -0.21, label = deparse(core_disp_pval), parse = TRUE, size = 4) +
-  annotate("text", x = 0.7, y = -0.19, label = deparse(core_pval), parse = TRUE, size = 4) +
-  ggtitle("C.   PCoA of core taxa (relative abundance)")
-fig5c
+fig5c <- rel_core_plot +
+  annotate("text", x = -0.8, y = 0.15, label = deparse(rel_core_disp_pval), parse = TRUE, size = 3) +
+  annotate("text", x = 0.5, y = -0.17, label = deparse(rel_core_trt_pval), parse = TRUE, size = 3) +
+  annotate("text", x = 0.5, y = -0.19, label = deparse(rel_core_gen_pval), parse = TRUE, size = 3) 
 
 ```
 
 ```{r fig 5d accessory PCoA}
 
-pseq_core_rel <- transform_sample_counts(pseq_core, function(x) x / sum(x))
-pseq_core_rel_ord <-plot_ordination(pseq_core_rel, ordinate(pseq_core_rel,"PCoA", "bray"), color="Treatment", shape="Genotype", justDF = TRUE) 
-eigvec_rel <- ordinate(pseq_core_rel,"PCoA", "bray")$values["Eigenvalues"]
-percvar_rel <- round(100 * eigvec_rel[1:2,]/sum(eigvec_rel), 1)
-
-fig5d <- ggplot(data = pseq_core_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, shape = Genotype, group = Treatment)) +
-  geom_point(color = "black", size = 4) +
-  stat_ellipse()+
-  theme_bw()+
-  theme(panel.grid = element_blank()) +
-  scale_shape_manual(values=c(21,22,23,24,25)) +
-  scale_color_manual(values = trt_col) +
-  scale_fill_manual(values = trt_col) +
-  guides(fill = "none") +
-  labs(x = paste0("Axis 1 (", percvar_rel[1], "%)"),
-       y = paste0("Axis 2 (", percvar_rel[2], "%)")) +
-  ggtitle("C.   PCoA of core taxa (relative abundance)")
-fig5d
+fig5d <- rel_acc_plot +
+  annotate("text", x = -0.9, y = 0.70, label = deparse(rel_acc_disp_pval), parse = TRUE, size = 3) +
+  annotate("text", x = 0.75, y = -0.70, label = deparse(rel_acc_trt_pval), parse = TRUE, size = 3) +
+  annotate("text", x = 0.75, y = -0.80, label = deparse(rel_acc_gen_pval), parse = TRUE, size = 3) 
 
 ```
 
 
-```{r full fig 5}
+```{r full fig 5, fig.height = 8, fig.width = 11}
 
-ggarrange(fig5a, fig5b, fig5c, fig5d)
+## set the layout
+layout <- "
+AAAB
+CCDD
+"
+
+## add plots together with layout
+Fig5 <- fig5a + fig5b + fig5c + fig5d + plot_layout(design = layout, guides = "collect")
+Fig5
+
+## save figure 5
+ggsave("Figures/Fig5_16S_diversity.png", height = 8, width = 11, dpi = 600)
+ggsave("Figures/Fig5_16S_diversity.pdf", height = 8, width = 11, useDingbats = FALSE)
 
 ```
 
+**Figure 5:** 
 
 <br/>
 <br/>
