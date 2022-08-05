@@ -937,7 +937,7 @@ save(phylo_rare, seqtab_rare, samdf_cleanest, taxa_clean, file = "Data/16s_data/
 
 ```{r trim low OUTs}
 
-load(file = "Data/16s_data/phylo_rarefy.Rdata")
+load(file = "Data/16s_data/phylo_clean.Rdata")
 
 #formatting the table for mcmc.otu - requires one first column that's 1 through whatever
 #& has "X" as column name
@@ -957,8 +957,6 @@ seq_trim_allinfo <- purgeOutliers(seq_formcmc, count.columns = 3:1540, sampleZcu
 #remove sample info
 seq_trim <- seq_trim_allinfo[,3:418] 
 
-#write.csv(seq.trim,file="mr16s_seqtab.rev.cleanest.trim.csv")
-#seq.trim <- read.csv("mr16s_seqtab.rev.cleanest.trim.csv",row.names=1)
 
 #remake phyloseq objects
 phylo_trim <- phyloseq(otu_table(seq_trim, taxa_are_rows=FALSE), 
@@ -1031,6 +1029,169 @@ save(phylo_trim_rare, seqtab_trim_rare, samdf_trim, taxa_clean, file = "Data/16s
 
 
 ## Microbiome diversity analyses {.tabset}
+
+### New figures for coauthors
+
+```{r ggplotly of barplots}
+
+load(file = "Data/16s_data/phylo_clean.Rdata")
+
+## Phyla of all trimmed and rarefied ASVs
+phylo_trim_rare_rel <- transform_sample_counts(phylo_trim_rare, function(x) x / sum(x))
+phylo_trim_rare_rel_df <- data.frame(tax_table(phylo_trim_rare_rel))
+
+trim_rare_rel_phyla <- plot_bar2(phylo_trim_rare_rel, x = "Genotype", fill="Phylum", colour="Phylum")+
+  geom_bar(stat="identity") +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(22)) +
+  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(22)) +
+  facet_wrap(~Treatment, ncol = 4) +
+  ggtitle("Rarefied total ASVs (relative abundance)")
+ggplotly(trim_rare_rel_phyla)
+
+
+## Selecting just Phylum Proteobacteria 
+phylo_proteo <- subset_taxa(phylo_trim_rare, Phylum %in% "Proteobacteria")
+phylo_proteo_rel <- transform_sample_counts(phylo_proteo, function(x) x / sum(x))
+
+proteo_plot <- plot_bar2(phylo_proteo_rel, x = "Genotype", fill = "Order", colour = "Order")+
+  geom_bar(stat="identity") +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(24)) +
+  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(24)) +
+  facet_wrap(~ Treatment, ncol = 2) +
+  ggtitle("Proteobacteria ASVs (relative abundance)")
+ggplotly(proteo_plot)
+
+
+## Selecting just Order Rickettsiales  
+phylo_rick <- subset_taxa(phylo_proteo, Order %in% "Rickettsiales")
+phylo_rick_df <- data.frame(tax_table(phylo_rick)[,-7])
+phylo_rick_rel <- transform_sample_counts(phylo_rick, function(x) x / sum(x))
+
+
+rick_plot <- plot_bar2(phylo_rick_rel, x = "Genotype", fill = "seqs_ps", colour = "seqs_ps")+
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(4), labels = rownames(phylo_rick_df)) +
+  scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(4), labels = rownames(phylo_rick_df)) +
+  facet_wrap(~ Treatment, ncol = 2) +
+  ggtitle("Rickettsiales ASVs (relative abundance)")
+#ggplotly(rick_plot)
+
+```
+
+```{r barplots for koty, fig.height = 8, fig.width = 14}
+
+## combine them to send to coauthors:
+
+abundance_16s_plot <- trim_rare_rel_phyla / (proteo_plot | rick_plot)
+abundance_16s_plot
+
+## save figure 
+ggsave("Figures/Exploratory/16S_abundance.png", height = 8, width = 14, dpi = 600)
+ggsave("Figures/Exploratory/16S_abundance.pdf", height = 8, width = 14, useDingbats = FALSE)
+
+```
+
+```{r PCoA with Koty edits, fig.height = 5, fig.width = 10}
+
+## Ordination of all taxa
+#rel abun
+pseq_rel_ord <- plot_ordination(phylo_trim_rare_rel, ordinate(phylo_trim_rare_rel,"PCoA", "bray"), color = "Treatment", shape = "Genotype", justDF = TRUE) 
+eigvec_rel <- ordinate(phylo_trim_rare_rel,"PCoA", "bray")$values["Eigenvalues"]
+percvar_rel <- round(100 * eigvec_rel[1:2,]/sum(eigvec_rel), 1)
+
+
+
+### Dispersion stats of core taxa 
+seq_all <- data.frame(otu_table(phylo_trim_rare_rel)) # pull the otu table from the core object
+dist_all <- vegdist(seq_all) # calculate Bray-Curtis distances between samples
+samdf_all <- data.frame(sample_data(phylo_trim_rare_rel)) # pull sample data from the core phyloseq object
+bet_all <- betadisper(dist_all, samdf_all$Treatment)
+
+# Run the ANOVA
+all_anova <- anova(bet_all)
+all_anova
+plot(bet_all) # plot the treatments and distances to centroids on the
+boxplot(bet_all) # boxplot of the distances to centroid for each treatment
+
+## Dispersion by genotype: not significant 
+#dist_all_gen <- betadisper(dist_all, samdf_all$Genotype)
+#anova(dist_all_gen)
+
+## Test of pairwise (treatment and genotype models)
+#permutest(bet_all, pairwise = TRUE, permutations = 999) # not significant
+#permutest(dist_all_gen, pairwise = TRUE, permutations = 999) # not significant
+    
+
+### Multivariate stats (PERMANOVA)
+all_adonis <- adonis2(seq_all ~ Treatment + Genotype, data = samdf_all, permutations = 1500)
+all_adonis
+
+pcoa_all <- ggplot(data = pseq_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, shape = Genotype, group = Treatment)) +
+  geom_point(color = "black", size = 4) +
+  stat_ellipse()+
+  theme_bw()+
+  theme(panel.grid = element_blank()) +
+  scale_shape_manual(values = gen_shape) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  guides(fill = "none") +
+  labs(x = paste0("Axis 1 (", percvar_rel[1], "%)"),
+       y = paste0("Axis 2 (", percvar_rel[2], "%)")) +
+  ggtitle("All taxa (relative abundance)")
+
+
+dis <- data.frame(Treatment = bet_all$group, dist = bet_all$distances, Genotype = samdf_all$Genotype)
+
+dist_plot <- ggplot(dis, aes(x = Treatment, y = dist, color = Treatment, fill = Treatment)) +
+  geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  scale_shape_manual(values = gen_shape) +
+  guides(fill = "none") +
+  ylab("Distance to centroid")+
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.box="vertical")
+
+
+# combine PCoA with dist from dentroid
+ggarrange(pcoa_all, dist_plot, common.legend = TRUE, legend = "bottom")
+
+## save
+ggsave("Figures/Exploratory/16S_PCoA_all.png", height = 5, width = 10, dpi = 600)
+
+
+
+
+
+
+# top20 <- names(sort(taxa_sums(phylo_trim_rare), decreasing=TRUE))[1:20]
+# ps.top20 <- transform_sample_counts(phylo_trim_rare, function(OTU) OTU/sum(OTU))
+# ps.top20 <- prune_taxa(top20, ps.top20)
+# ps.top20 <- transform_sample_counts(ps.top20, function(OTU) OTU/sum(OTU))
+# 
+# 
+# plot2 <- plot_bar2(ps.top20, x = "Genotype", fill="Genus", colour="Genus")+
+#   geom_bar(stat="identity")+
+#   theme_bw()+
+#   theme(panel.grid = element_blank()) +
+#   #scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
+#   #scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
+#   facet_wrap(~Treatment, ncol = 2)
+# ggplotly(plot2)
+# 
+```
+
+<br/>
+<br/>
+
 
 [Notes from phyloseq author](https://rdrr.io/bioc/phyloseq/man/estimate_richness.html)
 Visualize alpha-diversity - Should be done on raw, untrimmed dataset
@@ -1299,7 +1460,7 @@ ggarrange(simp_stat_plot, shan_stat_plot, rich_stat_plot, even_stat_plot, common
 ```{r ID core taxa}
 
 ## IDing core taxa from the trimmed, rarefied data (in 70% of samples)
-pseq_core <- core(phylo_trim_rare, detection = 0, prevalence = 0.70)
+pseq_core <- core(phylo_trim_rare, detection = 0, prevalence = 0.99)
 pseq_core # 10 core taxa
 
 phylo_core_genus<- tax_glom(pseq_core, "Genus")
@@ -1308,12 +1469,13 @@ phylo_core_trt <- merge_samples(phylo_core_genus_rel, "Treatment")
 phylo_core_trt_rel <- transform_sample_counts(phylo_core_trt, function(x) x / sum(x))
 
 plot_bar2(phylo_core_genus_rel, x = "Genotype", fill="Genus", colour="Genus")+
-  geom_bar(stat="identity")+
+  geom_bar(stat="identity", colour = "black")+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
-  scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
-  facet_wrap(~Treatment, ncol = 2)
+  scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(6)) +
+  scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(6)) +
+  facet_wrap(~Treatment, ncol = 2) +
+  ggtitle("Relative abundance of core taxa (6 ASVs in total)")
 
 
 #not rel abun
@@ -1620,41 +1782,64 @@ ggarrange(acc_stat_plot, rel_acc_stat_plot, common.legend = TRUE, legend = "bott
 <br/>
 <br/>
 
-```{r PIECRUST DO WE NEED, eval=FALSE, include=FALSE}
+## Differentially abundant taxa {.tabset}
 
-#### making fasta file for picrust2 - trimmed not rarefied ####
+Performing this analysis with ANCOM and a tutorial for it can be found [here](https://github.com/FrederickHuangLin/ANCOM). I am mostly following Nicola's code from her Moorea paper.
 
-seqtab.trim <- read.csv(file="mr16s_seqtab.rev.cleanest.trim.csv",row.names=1)
-load("taxa2.Rdata")
-samdf <- read.csv(file="mr16s_sampledata_plusneg.csv")
-row.names(samdf) <- samdf$id
+```{r ancom all, eval=FALSE}
 
-phylo_trim <- phyloseq(otu_table(seqtab.trim, taxa_are_rows=FALSE), 
-                         sample_data(samdf), 
-                         tax_table(taxa2))
-phylo_trim #223 taxa during revision
+# reloading the trimmed phylo data to be safe!
+load("Data/16S_data/phylo_clean.Rdata")
 
-trim.otu <- as.matrix(phylo_trim@otu_table)
-trim.taxa <- data.frame(phylo_trim@tax_table)
-rownames(trim.taxa)==colnames(trim.otu)
+otu_data_unt <- data.frame(phylo_cleanest@otu_table)
+otu_data<- data.frame(t(otu_data_unt)) # transpose and make into data frame
 
-colnames(trim.otu) <- trim.taxa$V8
-ids <- rownames(trim.taxa)
+# read in the meta data from the phyloseq object
+meta_data <- data.frame(phylo_cleanest@sam_data)
 
-path="~/nicfall drive/Moorea_revisions/mr16s_revised/generate_asv_table/mr16s_rev.cleanest.trimmed.fasta"
-uniquesToFasta(trim.otu, path, ids = ids, mode = "w", width = 20000)
+### Step 1: Data preprocessing
+# set objects going into feature_table_pre_process() function
+feature_table = otu_data; sample_var = "sampleID"; group_var = NULL
+out_cut = 0.05; zero_cut = 0.90; lib_cut = 1000; neg_lb = FALSE
 
-#re-formatting seq table so picrust likes it:
-#a tab-delimited table with ASV ids as the first column and sample abundances as all subsequent columns
-seqtab.trim.t <- t(seqtab.trim)
-write.table(seqtab.trim.t,file="mr16s_seqtab.cleanest.trim.t.txt")
-#manually removed the quotation marks that appeared in the file, and converted to tab delimited file from Excel
+prepro <- feature_table_pre_process(feature_table, meta_data, sample_var, group_var, out_cut, zero_cut, lib_cut, neg_lb)
+feature_table <- prepro$feature_table # Preprocessed feature table
+meta_data <- prepro$meta_data # Preprocessed metadata
+struc_zero = prepro$structure_zeros # Structural zero info
 
-#### moving on to mr16s_revised_analysis.R script in other folder ####
+
+### Step 2: ANCOM
+# set objects going into ANCOM() function
+main_var = "Treatment"; p_adj_method = "BH"; alpha = 0.05
+adj_formula = NULL; rand_formula = NULL
+res_all <- ANCOM(feature_table, meta_data, struc_zero, main_var, p_adj_method, 
+                alpha, adj_formula, rand_formula)
+save(res_all, file = "Data/16S_data/ancom_results.Rdata")
+
+
+# ### Step 3: Volcano Plot
+# # Number of taxa except structural zeros
+# n_taxa <- ifelse(is.null(struc_zero), nrow(feature_table), sum(apply(struc_zero, 1, sum) == 0))
+# 
+# # Cutoff values for declaring differentially abundant taxa
+# cut_off <- c(0.9 * (n_taxa -1), 0.8 * (n_taxa -1), 0.7 * (n_taxa -1), 0.6 * (n_taxa -1))
+# names(cut_off) <- c("detected_0.9", "detected_0.8", "detected_0.7", "detected_0.6")
+# 
+# # Annotation data
+# dat_ann <- data.frame(x = min(res_all$fig$data$x), y = cut_off["detected_0.7"], label = "W[0.7]")
+# fig <- res_all$fig +  
+#   geom_hline(yintercept = cut_off["detected_0.7"], linetype = "dashed") + 
+#   geom_text(data = dat_ann, aes(x = x, y = y, label = label), 
+#             size = 4, vjust = -0.5, hjust = 0, color = "orange", parse = TRUE)
+# fig  
 
 ```
 
-## Differentially abundant taxa {.tabset}
+No differentially abundant taxa were identified! 
+
+<br/>
+<br/>
+
 
 # **ITS2 Assessment** {.tabset}
 
@@ -1678,7 +1863,7 @@ its_df <- read.csv("Data/ITS2_data/ITS2_symportal.csv") %>%
 ## read in the meta data from the samples
 meta <- read.csv("Data/Acerv_MP_Metadata.csv") %>% 
   column_to_rownames("sampleID") %>% # making first column of sample IDs the rownames
-  filter(Genotype %in% keep_samples) %>% # select for only the GE matching samples (defined above)
+ # filter(Genotype %in% keep_samples) %>% # select for only the GE matching samples (defined above)
   filter(Treatment != "blank_control") %>% # and remove the neg controls
   separate(Genotype, c("Genotype", "Frag"), sep = "(?=[A-Z])") 
 
@@ -1887,16 +2072,6 @@ ggsave("Figures/Fig5_16S_diversity.pdf", height = 8, width = 11, useDingbats = F
 ```
 
 **Figure 5:** *Acropora cervicornis* bacterial (16S) communities across experimental treatments including, (A) the core microbial taxa in each fragment, (B) Shannon diversity across treatments, and multivariate ordination plots (PCoA) of between-sample Bray–Curtis dissimilarity of rarefied ASVs of both (C) core and (D) accessory taxa. PCoA ellipses depict 95% confidence intervals and p-values indicate significance of dispersion (P~disp~) and multivariate location (P~treat~ and P~genotype~).
-
-<br/>
-<br/>
-
-
-### Figure 6
-
-```{r}
-
-```
 
 <br/>
 <br/>
