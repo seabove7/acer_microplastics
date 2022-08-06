@@ -159,7 +159,7 @@ keep_samples <- c("10aA - 1", "5aC - 2", "10aB - 1", "6D - 1", "5aC - 1", "6B - 
 
 ## read in the meta data from the samples
 meta <- read.csv("Data/Acerv_MP_Metadata.csv") %>% 
-  filter(Genotype %in% keep_samples) %>% # select for only the GE-matching samples
+  #filter(Genotype %in% keep_samples) %>% # select for only the GE-matching samples
   separate(Genotype, c("Genotype", "Frag"), sep = "(?=[A-Z])") 
 
 
@@ -759,7 +759,7 @@ ps_clean1 <- prune_taxa(!contamdf_freq$contaminant, ps_clean)
 # also remove negative controls, don't need them anymore I think
 ps_cleaner <- subset_samples(ps_clean1, (Treatment != "blank_control"))
 
-ps_cleaner # 1607 taxa left, 19 samples
+ps_cleaner # 1607 taxa left, 19 samples      3272 taxa left, 36 samples
 
 ```
 
@@ -774,7 +774,7 @@ ps_cleaner # 1607 taxa left, 19 samples
 ```{r save the sequences to fasta for blast, eval=FALSE, include=FALSE}
 
 ## make output fasta file 
-ids <- paste0("sq", seq(1, length(colnames(seqtab_nochim))))
+ids <- paste0("ASV", seq(1, length(colnames(seqtab_nochim))))
 uniquesToFasta(seqtab_nochim, "Data/16s_data/acer_cleaned_16s.fasta", ids = ids, mode = "w", width = 20000)
 
 ```
@@ -857,16 +857,19 @@ uniquesToFasta(seqtab_nochim, "Data/16s_data/acer_cleaned_16s.fasta", ids = ids,
 
 ## read in euk_contam_asvs.csv to remove from ps_cleaner
 # should be 158 to remove
-euks <- read.csv("Data/16s_data/euk_contam_asvs.csv", header = FALSE) %>% 
-  mutate(V1 = gsub("sq", "ASV", V1)) # replace sq with ASV
+euks <- read.csv("Data/16s_data/euk_contam_asvs.csv", header = FALSE)
 euks_names <- euks$V1 # make list from sequence names that are eukaryotes
 
 alltaxa <- taxa_names(ps_cleaner) 
-#length(alltaxa) # 1607 total 
+#length(alltaxa) # 3272 total 
 keepers <- alltaxa[!(alltaxa %in% euks_names)] 
-#length(keepers) # 1538, so that means only 69 euks got through above
+#length(keepers) # 3231, so that means only 41 euks got through above
 phylo_cleanest <- prune_taxa(keepers, ps_cleaner) 
-# 1538 ASVs in phylo_cleanest
+# 3231 ASVs, 36 (1538 ASVs, 19) samples in phylo_cleanest 
+
+### remove sample A5
+#phylo_cleanest <- subset_samples(phylo_cleanest, sampleID != "A5")
+#phylo_cleanest # 3231 taxa and 35 samples
 
 seqtab_cleanest <- data.frame(otu_table(phylo_cleanest))
 samdf_cleanest <- data.frame(phylo_cleanest@sam_data)
@@ -885,6 +888,8 @@ Looks good! We have now cleaned up the sample data to remove contamination from 
 ## Rarefy {.tabset}
 
 ### Rarefy cleaned data
+
+Sample A5 is weirdly high so I am going to remove it from here and through downstream analyses.
 
 ```{r rarefaction plots, fig.align="center"}
 
@@ -910,16 +915,15 @@ rarecurve(seqtab_cleanest, step = 20, sample = raremax, col = "blue", cex = 0.6)
 ## subset the taxa2 to only have cleaned ASVs
 taxa_clean <- subset(taxa2, rownames(taxa2) %in% colnames(seqtab_rare))
 
-
 # phyloseq object but rarefied
 phylo_rare <- phyloseq(otu_table(seqtab_rare, taxa_are_rows = FALSE), 
                sample_data(samdf_cleanest), 
                tax_table(taxa_clean))
-phylo_rare # 1538 taxa 
+phylo_rare # 1538 taxa in 19 sample     3231 taxa in 35 samples
 
 # removing missing taxa - lost after rarefying
 phylo_rare <- prune_taxa(taxa_sums(phylo_rare) > 0, phylo_rare)
-phylo_rare # 1503 after pruning 
+phylo_rare # 2498 in 35 samples after pruning     (1503 in 19 samples)
 
 seqtab_rare <- data.frame(otu_table(phylo_rare))
 
@@ -950,19 +954,19 @@ seq_formcmc <- cbind(X = 0, int)
 seq_formcmc$X <- nums
 seq_formcmc$sample <- samples
 
-seq_trim_allinfo <- purgeOutliers(seq_formcmc, count.columns = 3:1540, sampleZcut = -2.5, otu.cut = 0.0001, zero.cut = 0.02)
+seq_trim_allinfo <- purgeOutliers(seq_formcmc, count.columns = 3:3274, sampleZcut = -2.5, otu.cut = 0.0001, zero.cut = 0.02)
 # no bad samples identified
-# 416 ASVs pass filters
+# 260 ASVs in 35 samples pass filters (416 ASVs in 19 samples)
 
 #remove sample info
-seq_trim <- seq_trim_allinfo[,3:418] 
+seq_trim <- seq_trim_allinfo[,3:262] 
 
 
 #remake phyloseq objects
 phylo_trim <- phyloseq(otu_table(seq_trim, taxa_are_rows=FALSE), 
                          sample_data(samdf_cleanest), 
                          tax_table(taxa_clean))
-phylo_trim # 416 asvs
+phylo_trim # 260 asvs
 
 
 ## Save the trimmed data
@@ -998,7 +1002,7 @@ seqtab_trm_rare <- rrarefy(seqtab_trim, raremax_trim) # generates one randomly r
 plot(S_trm, Srar_trm, xlab = "Observed No. of Species (trimmed)", ylab = "Rarefied No. of Species")
 abline(0, 1)
 
-# plot the rarefaction curve with the 15600 sample line
+# plot the rarefaction curve with the 7710 sample line
 rarecurve(seqtab_trim, step = 20, sample = raremax_trim, col = "blue", cex = 0.6, label = TRUE) 
 
 ## remove samples that don't meet the rare cutoff
@@ -1009,14 +1013,14 @@ seqtab_less <- seqtab_trim[!(row.names(seqtab_trim) %in% row_rm),] # filter to r
 
 seqtab_trim_rare <- rrarefy(seqtab_less, sample = raremax_trim) # generate one randomly rarefied community data frame or vector of given sample size
 
-# plot the rarefaction curve with the 6829 sample line
+# plot the rarefaction curve with the 7710 sample line
 rarecurve(seqtab_trim_rare, step = 20, sample = raremax_trim, col = "blue", cex = 0.6, label = TRUE) 
 
 #phyloseq object but rarefied & trimmed
 phylo_trim_rare <- phyloseq(otu_table(seqtab_trim_rare, taxa_are_rows=FALSE), 
                     sample_data(samdf_trim), 
                     tax_table(taxa_clean))
-phylo_trim_rare # 416 taxa remain
+phylo_trim_rare # 260 taxa remain
 
 
 ## Save the trimmed and rarefied data
@@ -1044,8 +1048,8 @@ trim_rare_rel_phyla <- plot_bar2(phylo_trim_rare_rel, x = "Genotype", fill="Phyl
   geom_bar(stat="identity") +
   theme_bw() +
   theme(panel.grid = element_blank()) +
-  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(22)) +
-  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(22)) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(21)) +
+  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(21)) +
   facet_wrap(~Treatment, ncol = 4) +
   ggtitle("Rarefied total ASVs (relative abundance)")
 ggplotly(trim_rare_rel_phyla)
@@ -1080,6 +1084,7 @@ rick_plot <- plot_bar2(phylo_rick_rel, x = "Genotype", fill = "seqs_ps", colour 
   scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(4), labels = rownames(phylo_rick_df)) +
   facet_wrap(~ Treatment, ncol = 2) +
   ggtitle("Rickettsiales ASVs (relative abundance)")
+rick_plot
 #ggplotly(rick_plot)
 
 ```
@@ -1092,8 +1097,8 @@ abundance_16s_plot <- trim_rare_rel_phyla / (proteo_plot | rick_plot)
 abundance_16s_plot
 
 ## save figure 
-ggsave("Figures/Exploratory/16S_abundance.png", height = 8, width = 14, dpi = 600)
-ggsave("Figures/Exploratory/16S_abundance.pdf", height = 8, width = 14, useDingbats = FALSE)
+ggsave("Figures/Exploratory/16S_abundance.png", height = 8, width = 15, dpi = 600)
+ggsave("Figures/Exploratory/16S_abundance.pdf", height = 8, width = 15, useDingbats = FALSE)
 
 ```
 
@@ -1137,7 +1142,8 @@ pcoa_all <- ggplot(data = pseq_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Tre
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = gen_shape) +
+  scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
   guides(fill = "none") +
@@ -1149,11 +1155,12 @@ pcoa_all <- ggplot(data = pseq_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Tre
 dis <- data.frame(Treatment = bet_all$group, dist = bet_all$distances, Genotype = samdf_all$Genotype)
 
 dist_plot <- ggplot(dis, aes(x = Treatment, y = dist, color = Treatment, fill = Treatment)) +
-  geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+   geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
   geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
-  scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = gen_shape) +
+  scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
   guides(fill = "none") +
   ylab("Distance to centroid")+
   xlab("Treatment") +
@@ -1172,22 +1179,25 @@ ggsave("Figures/Exploratory/16S_PCoA_all.png", height = 5, width = 10, dpi = 600
 
 
 
-# top20 <- names(sort(taxa_sums(phylo_trim_rare), decreasing=TRUE))[1:20]
-# ps.top20 <- transform_sample_counts(phylo_trim_rare, function(OTU) OTU/sum(OTU))
-# ps.top20 <- prune_taxa(top20, ps.top20)
-# ps.top20 <- transform_sample_counts(ps.top20, function(OTU) OTU/sum(OTU))
-# 
-# 
-# plot2 <- plot_bar2(ps.top20, x = "Genotype", fill="Genus", colour="Genus")+
-#   geom_bar(stat="identity")+
-#   theme_bw()+
-#   theme(panel.grid = element_blank()) +
-#   #scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
-#   #scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
-#   facet_wrap(~Treatment, ncol = 2)
+ top20 <- names(sort(taxa_sums(phylo_trim_rare), decreasing=TRUE))[1:20]
+ ps.top20 <- transform_sample_counts(phylo_trim_rare, function(OTU) OTU/sum(OTU))
+ ps.top20 <- prune_taxa(top20, ps.top20)
+ ps.top20 <- transform_sample_counts(ps.top20, function(OTU) OTU/sum(OTU))
+ 
+ 
+plot2 <- plot_bar(ps.top20, x = "Genotype", fill="Genus")+
+  geom_bar(stat="identity")+
+  theme_bw()+
+  theme(panel.grid = element_blank()) +
+  scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(15)) +
+  #scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(15)) +
+  facet_wrap(~Treatment, ncol = 2) +
+  ggtitle("Top 20 ASVs across samples")
+plot2
 # ggplotly(plot2)
-# 
+ 
 ```
+
 
 <br/>
 <br/>
@@ -1254,7 +1264,7 @@ simp_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = InvSimpson, color = Tre
   geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
-  scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = gen_shape) +
   guides(fill = "none") +
   ylab("Inv. Simpson index") +
   xlab("Treatment") +
@@ -1303,7 +1313,7 @@ shan_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Shannon, color = Treatm
   geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
-  scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = gen_shape) +
   guides(fill = "none") +
   ylab("Shannon index")+
   xlab("Treatment") +
@@ -1352,7 +1362,7 @@ rich_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Observed, color = Treat
   geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
-  scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = gen_shape) +
   guides(fill = "none") +
   ylab("AVS richness")+
   xlab("Treatment") +
@@ -1402,7 +1412,7 @@ even_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Evenness, color = Treat
   geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
-  scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = gen_shape) +
   guides(fill = "none") +
   ylab("Evenness")+
   xlab("Treatment") +
@@ -1461,7 +1471,7 @@ ggarrange(simp_stat_plot, shan_stat_plot, rich_stat_plot, even_stat_plot, common
 
 ## IDing core taxa from the trimmed, rarefied data (in 70% of samples)
 pseq_core <- core(phylo_trim_rare, detection = 0, prevalence = 0.99)
-pseq_core # 10 core taxa
+pseq_core # 4 core taxa
 
 phylo_core_genus<- tax_glom(pseq_core, "Genus")
 phylo_core_genus_rel <- transform_sample_counts(phylo_core_genus, function(x) x / sum(x))
@@ -1488,7 +1498,7 @@ core_plot <- ggplot(data = pseq_core_ord, aes(x = Axis.1, y = Axis.2, colour = T
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = gen_shape) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
   guides(fill = "none") +
@@ -1509,7 +1519,7 @@ rel_core_plot <- ggplot(data = pseq_core_rel_ord, aes(x = Axis.1, y = Axis.2, co
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = gen_shape) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
   guides(fill = "none") +
@@ -1657,7 +1667,7 @@ acc_plot <- ggplot(data = phylo_acc_ord, aes(x = Axis.1, y = Axis.2, colour = Tr
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = gen_shape) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
   guides(fill = "none") +
@@ -1679,7 +1689,7 @@ rel_acc_plot <- ggplot(data = phylo_acc_rel_ord, aes(x = Axis.1, y = Axis.2, col
   stat_ellipse()+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = gen_shape) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
   guides(fill = "none") +
