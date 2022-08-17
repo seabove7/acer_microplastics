@@ -57,7 +57,7 @@ install.packages("Biostrings")
 
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
-BiocManager::install(version = "3.14")
+BiocManager::install(version = "3.15") # Bioconductor version '3.14' requires R version '4.1'; use `BiocManager::install(version = '3.15')` with R version 4.2; see https://bioconductor.org/install
 BiocManager::install("phyloseq")
 
 
