@@ -1047,10 +1047,11 @@ phylo_trim_rare_rel_df <- data.frame(tax_table(phylo_trim_rare_rel))
 trim_rare_rel_phyla <- plot_bar2(phylo_trim_rare_rel, x = "Genotype", fill="Phylum", colour="Phylum")+
   geom_bar(stat="identity") +
   theme_bw() +
-  theme(panel.grid = element_blank()) +
+  theme(panel.grid = element_blank(), legend.position = "bottom", ) +
   scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(21)) +
   scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(21)) +
   facet_wrap(~Treatment, ncol = 4) +
+  guides(color = guide_legend(nrow = 3, byrow = FALSE, keyheight = 0.1, default.unit = "cm"), fill = guide_legend(nrow = 3, byrow = FALSE, keyheight = 0.1, default.unit = "cm")) +
   ggtitle("Rarefied total ASVs (relative abundance)")
 ggplotly(trim_rare_rel_phyla)
 
@@ -1062,10 +1063,11 @@ phylo_proteo_rel <- transform_sample_counts(phylo_proteo, function(x) x / sum(x)
 proteo_plot <- plot_bar2(phylo_proteo_rel, x = "Genotype", fill = "Order", colour = "Order")+
   geom_bar(stat="identity") +
   theme_bw() +
-  theme(panel.grid = element_blank()) +
+  theme(panel.grid = element_blank(), legend.key.size = unit(0.3, 'cm')) +
   scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(24)) +
   scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(24)) +
   facet_wrap(~ Treatment, ncol = 2) +
+  guides(color = guide_legend(ncol = 1), fill = guide_legend(ncol = 1)) +
   ggtitle("Proteobacteria ASVs (relative abundance)")
 ggplotly(proteo_plot)
 
@@ -1137,35 +1139,36 @@ boxplot(bet_all) # boxplot of the distances to centroid for each treatment
 all_adonis <- adonis2(seq_all ~ Treatment + Genotype, data = samdf_all, permutations = 1500)
 all_adonis
 
-pcoa_all <- ggplot(data = pseq_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, shape = Genotype, group = Treatment)) +
-  geom_point(color = "black", size = 4) +
+pcoa_all <- ggplot(data = pseq_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, group = Treatment, shape = Treatment)) +
+  geom_point(size = 3, alpha = 0.3) +
   stat_ellipse()+
   theme_bw()+
-  theme(panel.grid = element_blank()) +
+  theme(panel.grid = element_blank(), legend.position = c(0.21, 0.17), legend.key.size = unit(0.4, 'cm')) +
   #scale_shape_manual(values = gen_shape) +
-  scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
-  guides(fill = "none") +
+  guides(colour = "none",
+         fill = guide_legend(override.aes = list(alpha = 1))) +
   labs(x = paste0("Axis 1 (", percvar_rel[1], "%)"),
-       y = paste0("Axis 2 (", percvar_rel[2], "%)")) +
-  ggtitle("All taxa (relative abundance)")
+       y = paste0("Axis 2 (", percvar_rel[2], "%)"))
 
 
 dis <- data.frame(Treatment = bet_all$group, dist = bet_all$distances, Genotype = samdf_all$Genotype)
 
-dist_plot <- ggplot(dis, aes(x = Treatment, y = dist, color = Treatment, fill = Treatment)) +
-   geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+dist_plot <- ggplot(dis, aes(x = Treatment, y = dist, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(size = 3, alpha = 0.3, position = position_jitter(width = 0.2)) +
   geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
   #scale_shape_manual(values = gen_shape) +
-  scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
-  guides(fill = "none") +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
   ylab("Distance to centroid")+
   xlab("Treatment") +
   theme_bw() +
-  theme(panel.grid = element_blank(), legend.box="vertical")
+  theme(panel.grid = element_blank(), legend.position = "none", axis.text.x = element_blank(), axis.title.x = element_blank())
 
 
 # combine PCoA with dist from dentroid
@@ -1197,7 +1200,6 @@ plot2
 # ggplotly(plot2)
  
 ```
-
 
 <br/>
 <br/>
@@ -2014,74 +2016,55 @@ ggsave("Figures/Fig2_ITS2.pdf", height = 4, width = 4, useDingbats = FALSE)
 
 ### Figure 5
 
-```{r fig 5a order barplot}
+```{r fig 5a phylum barplot}
 
-phylo_core_genus<- tax_glom(pseq_core, "Genus")
-phylo_core_genus_rel <- transform_sample_counts(phylo_core_genus, function(x) x / sum(x))
-phylo_core_trt <- merge_samples(phylo_core_genus_rel, "Treatment")
-phylo_core_trt_rel <- transform_sample_counts(phylo_core_trt, function(x) x / sum(x))
-
-
-## plot top 20 ASVs from XXX phylo object by order
-fig5a <- plot_bar2(phylo_core_genus_rel, x = "Genotype", fill="Genus", colour="Genus")+
-  geom_bar(stat="identity")+
-  theme_bw()+
-  theme(panel.grid = element_blank(), legend.position = "right", strip.background = element_blank()) +
-  facet_wrap(~Treatment, ncol = 2) +
-  scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
-  scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(10)) +
-  ggtitle("A.   Core microbial taxa")
+trim_rare_rel_phyla2 <- trim_rare_rel_phyla + 
+  theme(strip.background = element_blank(), plot.title = element_blank())
 
 ```
 
-```{r fig 5b shannon diversity}
+```{r fig 5b Proto bacteria}
 
-## Sannon diversity plot from above
-fig5b <- shan_plot +
-  annotate("text", x = 1.1, y = 3.4, label = deparse(shan_plot_pval), parse = TRUE, size = 3) +
-  ggtitle("B.   Shannon Diversity") +
-  theme(legend.position = "none", axis.text.x = element_blank(), axis.title = element_blank())
+proteo_plot2 <- proteo_plot + 
+  theme(strip.background = element_blank(), plot.title = element_blank()) 
 
 ```
 
-```{r fig 5c core PCoA}
+```{r fig 5c PCoA}
 
-fig5c <- rel_core_plot +
-  annotate("text", x = -0.8, y = 0.15, label = deparse(rel_core_disp_pval), parse = TRUE, size = 3) +
-  annotate("text", x = 0.5, y = -0.17, label = deparse(rel_core_trt_pval), parse = TRUE, size = 3) +
-  annotate("text", x = 0.5, y = -0.19, label = deparse(rel_core_gen_pval), parse = TRUE, size = 3) 
+## Add the stats to the core PCA plot (rarefied data)
+core_disp_pval <- substitute(italic(P[disp])==p, list(p = format(core_anova[[1,5]], digits = 2)))
+all_trt_pval <- substitute(italic(P[treat])==p, list(p = format(all_adonis[[1,5]], digits = 2)))
+all_gen_pval <- substitute(italic(P[genotype])==p, list(p = format(all_adonis[[2,5]], digits = 2))) 
 
-```
-
-```{r fig 5d accessory PCoA}
-
-fig5d <- rel_acc_plot +
-  annotate("text", x = -0.9, y = 0.70, label = deparse(rel_acc_disp_pval), parse = TRUE, size = 3) +
-  annotate("text", x = 0.75, y = -0.70, label = deparse(rel_acc_trt_pval), parse = TRUE, size = 3) +
-  annotate("text", x = 0.75, y = -0.80, label = deparse(rel_acc_gen_pval), parse = TRUE, size = 3) 
+## update plot
+pcoa_all2 <- pcoa_all + 
+  #annotate("text", x = -0.8, y = 0.15, label = deparse(rel_core_disp_pval), parse = TRUE, size = 3) +
+  annotate("text", x = -0.47, y = -0.49, label = deparse(all_trt_pval), parse = TRUE, size = 3) +
+  annotate("text", x = -0.47, y = -0.53, label = deparse(all_gen_pval), parse = TRUE, size = 3) +
+  theme(legend.position = c(0.17, 0.32))
 
 ```
 
-
-```{r full fig 5, fig.height = 8, fig.width = 11}
+```{r full fig 5, fig.height = 8, fig.width = 14}
 
 ## set the layout
-layout <- "
-AAAB
-CCDD
+layout5 <- "
+AAAAAAAA
+BBBBCCCD
 "
 
 ## add plots together with layout
-Fig5 <- fig5a + fig5b + fig5c + fig5d + plot_layout(design = layout, guides = "collect")
-Fig5
+Figure5 <- trim_rare_rel_phyla2 + proteo_plot2 + pcoa_all2 + dist_plot + plot_layout(design = layout5) + plot_annotation(tag_levels = 'A')
+Figure5
 
-## save figure 5
-ggsave("Figures/Fig5_16S_diversity.png", height = 8, width = 11, dpi = 600)
-ggsave("Figures/Fig5_16S_diversity.pdf", height = 8, width = 11, useDingbats = FALSE)
+## save figure 
+ggsave("Figures/Figure5_16s_diversity.png", height = 8, width = 14, dpi = 600)
+ggsave("Figures/Figure5_16s_diversity.pdf", height = 8, width = 14, useDingbats = FALSE)
 
 ```
 
-**Figure 5:** *Acropora cervicornis* bacterial (16S) communities across experimental treatments including, (A) the core microbial taxa in each fragment, (B) Shannon diversity across treatments, and multivariate ordination plots (PCoA) of between-sample Bray–Curtis dissimilarity of rarefied ASVs of both (C) core and (D) accessory taxa. PCoA ellipses depict 95% confidence intervals and p-values indicate significance of dispersion (P~disp~) and multivariate location (P~treat~ and P~genotype~).
+**Figure 5:** *Acropora cervicornis* bacterial (16S) relative abundance across fragments and experimental treatments. Diversity at the phylum level (**A**) depicts dominance of all samples by taxa from Proteobacteria and this (**B**) phylum was dominated by the order Rickettsiales in most samples. Beta diversity was visualized through (**C**) multivariate ordination plots (PCoA) of between-sample Bray–Curtis dissimilarity of rarefied ASVs of all taxa and (**D**) distance to treatment centroids. PCoA ellipses depict 95% confidence intervals and p-values indicate significance of treatment and genotype.
 
 <br/>
 <br/>
