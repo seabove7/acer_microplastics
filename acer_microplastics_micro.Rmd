@@ -71,6 +71,9 @@ BiocManager::install("microbiome")
 ## used for the diversity metrics of 16S
 devtools::install_github("awhstin/awtools")
 
+## facet label colours
+devtools::install_github("teunbrand/ggh4x")
+
 ```
 
 ```{r load packages, echo = FALSE}
@@ -95,6 +98,8 @@ library(car)
 library(lme4)
 library(patchwork)
 library(compositions)
+library(ggh4x) 
+library(shades)
 
 ```
 
@@ -1034,9 +1039,14 @@ save(phylo_trim_rare, seqtab_trim_rare, samdf_trim, taxa_clean, file = "Data/16s
 
 ## Microbiome diversity analyses {.tabset}
 
-### New figures for coauthors
+[Notes from phyloseq author](https://rdrr.io/bioc/phyloseq/man/estimate_richness.html)
+Visualize alpha-diversity - Should be done on raw, untrimmed dataset
 
-```{r ggplotly of barplots}
+<br/>
+
+### Relative abundance across samples
+
+```{r barplot phylum of all samples}
 
 load(file = "Data/16s_data/phylo_clean.Rdata")
 
@@ -1050,11 +1060,21 @@ trim_rare_rel_phyla <- plot_bar2(phylo_trim_rare_rel, x = "Genotype", fill="Phyl
   theme(panel.grid = element_blank(), legend.position = "bottom", ) +
   scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(21)) +
   scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(21)) +
-  facet_wrap(~Treatment, ncol = 4) +
+  ylab("Relative abundance") +
+  facet_wrap2( ~ Treatment, scales = "free_y", ncol = 4,  
+    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.3)[[1]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[2]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[3]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[4]])) )) +
   guides(color = guide_legend(nrow = 3, byrow = FALSE, keyheight = 0.1, default.unit = "cm"), fill = guide_legend(nrow = 3, byrow = FALSE, keyheight = 0.1, default.unit = "cm")) +
   ggtitle("Rarefied total ASVs (relative abundance)")
 ggplotly(trim_rare_rel_phyla)
 
+```
+
+Samples appear to be dominated by taxa within the phylum Proteobacteria. Next, I have visualized the diversity of bacteria within Proteobacteria only.
+
+```{r barplot proto order of all samples}
 
 ## Selecting just Phylum Proteobacteria 
 phylo_proteo <- subset_taxa(phylo_trim_rare, Phylum %in% "Proteobacteria")
@@ -1066,11 +1086,21 @@ proteo_plot <- plot_bar2(phylo_proteo_rel, x = "Genotype", fill = "Order", colou
   theme(panel.grid = element_blank(), legend.key.size = unit(0.3, 'cm')) +
   scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(24)) +
   scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(24)) +
-  facet_wrap(~ Treatment, ncol = 2) +
+  ylab("Relative abundance") +
+  facet_wrap2( ~ Treatment, scales = "free_y",  
+    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.3)[[1]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[2]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[3]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[4]])) )) +
   guides(color = guide_legend(ncol = 1), fill = guide_legend(ncol = 1)) +
   ggtitle("Proteobacteria ASVs (relative abundance)")
 ggplotly(proteo_plot)
 
+```
+
+Again, there is a clear dominance across samples by a single order (Rickettsiales), regardless of experimental treatment. I have selected just this order to view the different ASVs that make up this order.
+
+```{r barplot Rickettsiales ASVs}
 
 ## Selecting just Order Rickettsiales  
 phylo_rick <- subset_taxa(phylo_proteo, Order %in% "Rickettsiales")
@@ -1084,25 +1114,300 @@ rick_plot <- plot_bar2(phylo_rick_rel, x = "Genotype", fill = "seqs_ps", colour 
   theme(panel.grid = element_blank()) +
   scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(4), labels = rownames(phylo_rick_df)) +
   scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(4), labels = rownames(phylo_rick_df)) +
-  facet_wrap(~ Treatment, ncol = 2) +
+  ylab("Relative abundance") +
+  facet_wrap2( ~ Treatment, scales = "free_y",  
+    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.3)[[1]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[2]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[3]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[4]])) )) +
   ggtitle("Rickettsiales ASVs (relative abundance)")
 rick_plot
 #ggplotly(rick_plot)
 
 ```
 
-```{r barplots for koty, fig.height = 8, fig.width = 14}
+<br/>
+<br/>
 
-## combine them to send to coauthors:
 
-abundance_16s_plot <- trim_rare_rel_phyla / (proteo_plot | rick_plot)
-abundance_16s_plot
+### Alpha diversity
 
-## save figure 
-ggsave("Figures/Exploratory/16S_abundance.png", height = 8, width = 15, dpi = 600)
-ggsave("Figures/Exploratory/16S_abundance.pdf", height = 8, width = 15, useDingbats = FALSE)
+```{r read in sample data}
+
+samdf <- read.csv("Data/Acerv_MP_Metadata.csv") %>% 
+  separate(Genotype, c("Genotype", "Frag"), sep = "(?=[A-Z])") %>% 
+  droplevels()
+row.names(samdf) <- samdf$sampleID
 
 ```
+
+```{r read in phyloseq objects, include=FALSE}
+
+### Untrimmed versions
+## Load the cleaned phylo objects
+load(file = "Data/16s_data/phylo_clean.Rdata")
+phylo_cleanest # 3230 cleaned across all 36 samples
+
+## Load the rarefied phylo objects
+load(file = "Data/16s_data/phylo_rarefy.Rdata") # <-- this file also loads the 'taxa2' tax table
+phylo_rare # 3115 rarefied across all 36 samples
+
+
+### Trimmed versions
+## Load the trimmed phylo objects
+load(file = "Data/16s_data/phylo_trim.Rdata")
+phylo_trim # 257 trimmed across all 36 samples
+
+## Load the trimmed and rarefied phylo objects
+load(file = "Data/16s_data/phylo_trim_rare.Rdata")
+phylo_trim_rare # 257 rarefied and trimmed across all 36 samples
+
+```
+
+```{r generate div metrics}
+
+alpha_df <- data.frame(estimate_richness(phylo_rare, split = TRUE, measures=c("Shannon", "InvSimpson", "Observed"))) # calculate shannon diversity, simpson, and observed species richness
+
+alpha_df$sampleID <- rownames(alpha_df)
+alpha_df_div <- merge(samdf, alpha_df, by = "sampleID") #add sample data
+alpha_df_div <- alpha_df_div %>% droplevels() # need to drop the blanks
+  
+
+# shannon diversity divided by species richness (Evenness)
+alpha_df_div$Evenness <- alpha_df_div$Shannon / (log(alpha_df_div$Observed))
+
+```
+
+<br/>
+
+
+#### Simpson diversity
+
+```{r simpson diversity by treatment}
+
+simp_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  #scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
+  guides(fill = "none", shape = "none") +
+  ylab("Inv. Simpson index") +
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.box="vertical")
+
+```
+
+```{r simpson stats, include=FALSE}
+
+## Simpson diversity linear mixed-effects model with a random slope of genotype
+simp_lm <- lmer((1 / InvSimpson) ~ Treatment + (1|Genotype), data = alpha_df_div)
+# need to transform data (inverse) to meet model assumptions
+
+
+# checking the model
+check_normality(simp_lm) # residuals appear normal
+check_heteroscedasticity(simp_lm) # error variance is homoscedastic
+#check_model(simp_lm) # overview: looks alright
+
+## model significance and summary
+simp_pval <- Anova(simp_lm)
+#summary(simp_lm)
+
+```
+
+```{r add stats to simpson plot, fig.align = 'center', fig.height = 4, fig.width = 7}
+
+## Add the stats to the plot
+simp_plot_pval <- substitute(italic(P)==p, list(p = format(simp_pval[[1,3]], digits = 2)))
+
+simp_stat_plot <- simp_plot +
+  annotate("text", x = 1, y = 78, label = deparse(simp_plot_pval), parse = TRUE, size = 4) +
+  theme(axis.title = element_blank()) +
+  ggtitle("  Inv. Simpson index")
+simp_stat_plot
+
+```
+
+<br/>
+
+
+#### Shannon diversity
+
+```{r shannon diversity by treatment}
+
+shan_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Shannon, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  #scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
+  guides(fill = "none", shape = "none") +
+  ylab("Shannon index")+
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.box="vertical")
+
+```
+
+```{r shannon stats, include=FALSE}
+
+## Shannon diversity linear mixed-effects model with a random slope of genotype
+shan_lm <- lmer(log(Shannon) ~ Treatment + (1|Genotype), data = alpha_df_div)
+# need to transform data (log) to meet model assumptions
+
+
+## checking the model
+check_normality(shan_lm) # residuals appear normal
+check_heteroscedasticity(shan_lm) # error variance is homoscedastic
+#check_model(shan_lm) # overview: looks alright
+
+## view model significance
+shan_pval <- Anova(shan_lm)
+#summary(shan_lm)
+
+```
+
+```{r add stats to shannon plot, fig.align = 'center', fig.height = 4, fig.width = 7}
+
+## Add the stats to the plot
+shan_plot_pval <- substitute(italic(P)==p, list(p = format(shan_pval[[1,3]], digits = 2)))
+
+shan_stat_plot <- shan_plot +
+  annotate("text", x = 1, y = 5.6, label = deparse(shan_plot_pval), parse = TRUE, size = 4) +
+  theme(axis.title = element_blank()) +
+  ggtitle("  Shannon index")
+shan_stat_plot
+
+```
+
+<br/>
+
+
+#### Species richness
+
+```{r richness by treatment}
+
+rich_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Observed, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  #scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
+  guides(fill = "none", shape = "none") +
+  ylab("ASV richness")+
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.box="vertical")
+
+```
+
+```{r richness stats, include=FALSE}
+
+## Species richness linear mixed-effects model with a random slope of genotype
+rich_lm <- lmer((1 / Observed) ~ Treatment + (1|Genotype), data = alpha_df_div)
+# need to transform data (inverse) to meet model assumptions
+
+
+## checking the model
+check_normality(rich_lm) # residuals not norma;
+check_heteroscedasticity(rich_lm) # error variance is NOT homoscedastic, but proceeding
+#check_model(rich_lm) # overview: looks okay
+
+## view model significance
+rich_pval <- Anova(rich_lm)
+#summary(rich_lm)
+
+```
+
+```{r add stats to richness plot, fig.align = 'center', fig.height = 4, fig.width = 7}
+
+## Add the stats to the plot
+rich_plot_pval <- substitute(italic(P)==p, list(p = format(rich_pval[[1,3]], digits = 2)))
+
+rich_stat_plot <- rich_plot +
+  annotate("text", x = 1, y = 720, label = deparse(rich_plot_pval), parse = TRUE, size = 4) +
+  theme(axis.title = element_blank()) +
+  ggtitle("  ASV richness")
+rich_stat_plot
+
+```
+
+<br/>
+
+
+#### Evenness
+
+```{r evenness by treatment}
+
+even_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  #scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
+  guides(fill = "none", shape = "none") +
+  ylab("Evenness")+
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.box="vertical")
+
+```
+
+```{r evenness stats, include=FALSE}
+
+## Evenness linear mixed-effects model with a random slope of genotype
+even_lm <- lmer((Evenness) ~ Treatment + (1|Genotype), data = alpha_df_div)
+
+## checking the model
+check_normality(even_lm) # residuals not norma;
+check_heteroscedasticity(even_lm) # error variance is homoscedastic
+#check_model(even_lm) # overview: looks alright
+
+## view model significance
+even_pval <- Anova(even_lm)
+#summary(even_lm)
+
+```
+
+```{r add stats to evenness plot, fig.align = 'center', fig.height = 4, fig.width = 7}
+
+## Add the stats to the plot
+even_plot_pval <- substitute(italic(P)==p, list(p = format(even_pval[[1,3]], digits = 2)))
+
+even_stat_plot <- even_plot +
+  annotate("text", x = 1, y = 75, label = deparse(even_plot_pval), parse = TRUE, size = 4) +
+  theme(axis.title = element_blank()) +
+  ggtitle("  Evenness")
+even_stat_plot
+
+```
+
+<br/>
+
+
+#### All alpha diversity metrics
+
+```{r all alpha diversity, fig.align = 'center', fig.height = 7, fig.width = 8}
+
+ggarrange(simp_stat_plot, shan_stat_plot, rich_stat_plot, even_stat_plot, common.legend = TRUE, labels = "AUTO")
+
+```
+
+<br/>
+<br/>
+
+
+### Beta diversity
 
 ```{r PCoA with Koty edits, fig.height = 5, fig.width = 10}
 
@@ -1204,266 +1509,6 @@ plot2
 <br/>
 <br/>
 
-
-[Notes from phyloseq author](https://rdrr.io/bioc/phyloseq/man/estimate_richness.html)
-Visualize alpha-diversity - Should be done on raw, untrimmed dataset
-
-```{r read in sample data}
-
-samdf <- read.csv("Data/Acerv_MP_Metadata.csv") %>% 
-  separate(Genotype, c("Genotype", "Frag"), sep = "(?=[A-Z])") %>% 
-  droplevels()
-row.names(samdf) <- samdf$sampleID
-
-```
-
-```{r read in phyloseq objects, include=FALSE}
-
-### Untrimmed versions
-## Load the cleaned phylo objects
-load(file = "Data/16s_data/phylo_clean.Rdata")
-phylo_cleanest # 3230 cleaned across all 36 samples
-
-## Load the rarefied phylo objects
-load(file = "Data/16s_data/phylo_rarefy.Rdata") # <-- this file also loads the 'taxa2' tax table
-phylo_rare # 3115 rarefied across all 36 samples
-
-
-### Trimmed versions
-## Load the trimmed phylo objects
-load(file = "Data/16s_data/phylo_trim.Rdata")
-phylo_trim # 257 trimmed across all 36 samples
-
-## Load the trimmed and rarefied phylo objects
-load(file = "Data/16s_data/phylo_trim_rare.Rdata")
-phylo_trim_rare # 257 rarefied and trimmed across all 36 samples
-
-```
-
-```{r generate div metrics}
-
-alpha_df <- data.frame(estimate_richness(phylo_rare, split = TRUE, measures=c("Shannon", "InvSimpson", "Observed"))) # calculate shannon diversity, simpson, and observed species richness
-
-alpha_df$sampleID <- rownames(alpha_df)
-alpha_df_div <- merge(samdf, alpha_df, by = "sampleID") #add sample data
-alpha_df_div <- alpha_df_div %>% droplevels() # need to drop the blanks
-  
-
-# shannon diversity divided by species richness (Evenness)
-alpha_df_div$Evenness <- alpha_df_div$Shannon / (log(alpha_df_div$Observed))
-
-```
-
-<br/>
-
-
-### Simpson diversity
-
-```{r simpson diversity by treatment}
-
-simp_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, fill = Treatment)) +
-  geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
-  geom_boxplot(fill = NA, outlier.colour = NA) +
-  scale_color_manual(values = trt_col) +
-  scale_fill_manual(values = trt_col) +
-  #scale_shape_manual(values = gen_shape) +
-  guides(fill = "none") +
-  ylab("Inv. Simpson index") +
-  xlab("Treatment") +
-  theme_bw() +
-  theme(panel.grid = element_blank(), legend.box="vertical")
-simp_plot
-
-```
-
-```{r simpson stats}
-
-## Simpson diversity linear mixed-effects model with a random slope of genotype
-simp_lm <- lmer(InvSimpson ~ Treatment + (1|Genotype), data = alpha_df_div)
-
-# checking the model
-check_normality(simp_lm) # residuals appear normal
-check_heteroscedasticity(simp_lm) # error variance is homoscedastic
-#check_model(simp_lm) # overview: looks meh, but will proceed
-
-# view model significance
-simp_pval <- Anova(simp_lm)
-simp_pval
-summary(simp_lm)
-
-```
-
-```{r add stats to simpson plot}
-
-## Add the stats to the plot
-simp_plot_pval <- substitute(italic(P)==p, list(p = format(simp_pval[[1,3]], digits = 2)))
-
-simp_stat_plot <- simp_plot +
-  annotate("text", x = 1, y = 8, label = deparse(simp_plot_pval), parse = TRUE, size = 4)
-
-```
-
-<br/>
-
-
-### Shannon diversity
-
-```{r shannon diversity by treatment}
-
-shan_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Shannon, color = Treatment, fill = Treatment)) +
-  geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
-  geom_boxplot(fill = NA, outlier.colour = NA) +
-  scale_color_manual(values = trt_col) +
-  scale_fill_manual(values = trt_col) +
-  #scale_shape_manual(values = gen_shape) +
-  guides(fill = "none") +
-  ylab("Shannon index")+
-  xlab("Treatment") +
-  theme_bw() +
-  theme(panel.grid = element_blank(), legend.box="vertical")
-shan_plot
-
-```
-
-```{r shannon stats}
-
-## Shannon diversity linear mixed-effects model with a random slope of genotype
-shan_lm <- lmer(Shannon ~ Treatment + (1|Genotype), data = alpha_df_div)
-
-# checking the model
-check_normality(shan_lm) # residuals appear normal
-check_heteroscedasticity(shan_lm) # error variance is homoscedastic
-#check_model(shan_lm) # overview: looks meh, but will proceed
-
-# view model significance
-shan_pval <- Anova(shan_lm)
-shan_pval
-summary(shan_lm)
-
-```
-
-```{r add stats to shannon plot}
-
-## Add the stats to the plot
-shan_plot_pval <- substitute(italic(P)==p, list(p = format(shan_pval[[1,3]], digits = 2)))
-
-shan_stat_plot <- shan_plot +
-  annotate("text", x = 1, y = 3, label = deparse(shan_plot_pval), parse = TRUE, size = 4)
-
-```
-
-<br/>
-
-
-### Species richness
-
-```{r richness by treatment}
-
-rich_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Observed, color = Treatment, fill = Treatment)) +
-  geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
-  geom_boxplot(fill = NA, outlier.colour = NA) +
-  scale_color_manual(values = trt_col) +
-  scale_fill_manual(values = trt_col) +
-  #scale_shape_manual(values = gen_shape) +
-  guides(fill = "none") +
-  ylab("AVS richness")+
-  xlab("Treatment") +
-  theme_bw() +
-  theme(panel.grid = element_blank(), legend.box="vertical")
-rich_plot
-
-```
-
-```{r richness stats}
-
-## richness linear model
-# the linear mixed-effects model with a random slope of genotype produced a singular fit so removing genotype
-rich_lm <- lm(log(Observed) ~ Treatment, data = alpha_df_div)  # need to log transform the richness
-
-# checking the model
-check_normality(rich_lm) # residuals not norma;
-check_heteroscedasticity(rich_lm) # error variance is homoscedastic
-#check_model(rich_lm) # overview: looks meh, but will proceed
-
-# view model significance
-rich_pval <- Anova(rich_lm)
-rich_pval
-summary(rich_lm)
-
-```
-
-```{r add stats to richness plot}
-
-## Add the stats to the plot
-rich_plot_pval <- substitute(italic(P)==p, list(p = format(rich_pval[[1,3]], digits = 2)))
-
-rich_stat_plot <- rich_plot +
-  annotate("text", x = 4, y = 175, label = deparse(rich_plot_pval), parse = TRUE, size = 4)
-
-```
-
-<br/>
-
-
-### Evenness
-
-```{r evenness by treatment}
-
-even_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Evenness, color = Treatment, fill = Treatment)) +
-  geom_point(aes(shape = Genotype), alpha = 0.5, position = position_jitter(width = 0.2), size = 4, colour = "black") +
-  geom_boxplot(fill = NA, outlier.colour = NA) +
-  scale_color_manual(values = trt_col) +
-  scale_fill_manual(values = trt_col) +
-  #scale_shape_manual(values = gen_shape) +
-  guides(fill = "none") +
-  ylab("Evenness")+
-  xlab("Treatment") +
-  theme_bw() +
-  theme(panel.grid = element_blank(), legend.box="vertical")
-even_plot
-
-```
-
-```{r evenness stats}
-
-## Evenness linear mixed-effects model with a random slope of genotype
-even_lm <- lmer(log(Evenness) ~ Treatment + (1|Genotype), data = alpha_df_div)
-
-# checking the model
-check_normality(even_lm) # residuals not norma;
-check_heteroscedasticity(even_lm) # heteroscedasticity detected in regular data so log-transforming
-#check_model(even_lm) # overview: looks meh, but will proceed
-
-# view model significance
-even_pval <- Anova(even_lm)
-even_pval
-summary(even_lm)
-
-```
-
-```{r add stats to evenness plot}
-
-## Add the stats to the plot
-even_plot_pval <- substitute(italic(P)==p, list(p = format(even_pval[[1,3]], digits = 2)))
-
-even_stat_plot <- even_plot +
-  annotate("text", x = 1, y = 0.7, label = deparse(even_plot_pval), parse = TRUE, size = 4)
-
-```
-
-<br/>
-
-
-### All alpha diversity metrics
-
-```{r}
-
-ggarrange(simp_stat_plot, shan_stat_plot, rich_stat_plot, even_stat_plot, common.legend = TRUE)
-
-```
-
-<br/>
-<br/>
 
 ## Core vs. accessory microbiome {.tabset}
 
@@ -2019,14 +2064,16 @@ ggsave("Figures/Fig2_ITS2.pdf", height = 4, width = 4, useDingbats = FALSE)
 ```{r fig 5a phylum barplot}
 
 trim_rare_rel_phyla2 <- trim_rare_rel_phyla + 
-  theme(strip.background = element_blank(), plot.title = element_blank())
+  theme(strip.background = element_blank()) +
+  ggtitle("Rarefied ASVs (phylum)")
 
 ```
 
 ```{r fig 5b Proto bacteria}
 
 proteo_plot2 <- proteo_plot + 
-  theme(strip.background = element_blank(), plot.title = element_blank()) 
+  theme(strip.background = element_blank()) +
+  ggtitle("Protobacteria ASVs (order)")
 
 ```
 
@@ -2046,7 +2093,7 @@ pcoa_all2 <- pcoa_all +
 
 ```
 
-```{r full fig 5, fig.height = 8, fig.width = 14}
+```{r full fig 5, fig.height = 9, fig.width = 14}
 
 ## set the layout
 layout5 <- "
@@ -2059,8 +2106,8 @@ Figure5 <- trim_rare_rel_phyla2 + proteo_plot2 + pcoa_all2 + dist_plot + plot_la
 Figure5
 
 ## save figure 
-ggsave("Figures/Figure5_16s_diversity.png", height = 8, width = 14, dpi = 600)
-ggsave("Figures/Figure5_16s_diversity.pdf", height = 8, width = 14, useDingbats = FALSE)
+ggsave("Figures/Figure5_16s_diversity.png", height = 9, width = 14, dpi = 600)
+ggsave("Figures/Figure5_16s_diversity.pdf", height = 9, width = 14, useDingbats = FALSE)
 
 ```
 
@@ -2072,9 +2119,36 @@ ggsave("Figures/Figure5_16s_diversity.pdf", height = 8, width = 14, useDingbats 
 
 ## Supplemental figures {.tabset}
 
-```{r}
+### Figure SXX
+
+```{r fig SXX alpha diversity, fig.align = 'center', fig.height = 7, fig.width = 8}
+
+figSX <- ggarrange(simp_stat_plot, shan_stat_plot, rich_stat_plot, even_stat_plot, common.legend = TRUE, labels = "AUTO", legend = "none") 
+figSX
+
+## save figure 
+ggsave("Figures/Supplemental/FigureSX_alpha.png", height = 7, width = 8, dpi = 600)
+ggsave("Figures/Supplemental/FigureSX_alpha.pdf", height = 7, width = 8, useDingbats = FALSE)
 
 ```
+
+**Figure SX** Alpha diversity metrics across all samples in all treatments, depicting (**A**) Simpson index, (**B**) Shannon index, (**c**) species richness (ASVs), and (**D**) Evenness.
+
+<br/>
+<br/>
+
+
+### Figure SXX
+
+```{r fig SXX , fig.align = 'center', fig.height = 7, fig.width = 8}
+
+# ## save figure 
+# ggsave("Figures/Supplemental/FigureSX_alpha.png", height = 7, width = 8, dpi = 600)
+# ggsave("Figures/Supplemental/FigureSX_alpha.pdf", height = 7, width = 8, useDingbats = FALSE)
+
+```
+
+**Figure SX** Alpha diversity metrics across all samples in all treatments, depicting (**A**) Simpson index, (**B**) Shannon index, (**c**) species richness (ASVs), and (**D**) Evenness.
 
 <br/>
 <br/>
