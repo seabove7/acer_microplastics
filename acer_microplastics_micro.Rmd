@@ -1510,6 +1510,253 @@ plot2
 <br/>
 
 
+## Background microbiome {.tabset}
+
+Because samples are all dominated by Aquarickettsia, we wanted to see if the background diversity varied across treatments once we removed those ASVs.  
+
+<br/>
+
+### Relative abundance of non-Aquarickettsia
+
+```{r barplot non aqua classes}
+
+load(file = "Data/16s_data/phylo_clean.Rdata")
+
+
+## Selecting just Phylum Proteobacteria 
+gen_rick <- subset_taxa(phylo_trim_rare, Genus != "MD3-55")
+gen_rick_rel <- transform_sample_counts(gen_rick, function(x) x / sum(x))
+
+no_rick_barplot <- plot_bar2(gen_rick_rel, x = "Genotype", fill = "Class", colour = "Class")+
+  geom_bar(stat="identity") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.key.size = unit(0.3, 'cm')) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(22)) +
+  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(22)) +
+  ylab("Relative abundance") +
+  facet_wrap2( ~ Treatment, scales = "free_y", ncol = 4,  
+    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.3)[[1]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[2]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[3]]),
+                          element_rect(fill = opacity(trt_col, 0.3)[[4]])) )) +
+  guides(color = guide_legend(ncol = 1), fill = guide_legend(ncol = 1)) +
+  ggtitle("Non Aquarickettsia diversity (relative abundance)")
+ggplotly(no_rick_barplot)
+
+
+## save
+ggsave("Figures/Exploratory/16S_noAqua_barplot.png", height = 3.5, width = 10, dpi = 600)
+
+```
+
+<br/>
+<br/>
+
+
+### Alpha diversity
+
+```{r richness without aqua}
+
+## calculate richness
+alpha_noAq_df <- data.frame(estimate_richness(gen_rick, split = TRUE, measures=c("Shannon", "InvSimpson", "Observed"))) # calculate shannon diversity, simpson, and observed species richness
+
+alpha_noAq_df$sampleID <- rownames(alpha_noAq_df)
+alpha_noAq_df_div <- merge(samdf, alpha_noAq_df, by = "sampleID") #add sample data
+alpha_noAq_df_div <- alpha_noAq_df_div %>% droplevels() # need to drop the blanks
+
+
+# shannon diversity divided by species richness (Evenness)
+alpha_noAq_df_div$Evenness <- alpha_noAq_df_div$Shannon / (log(alpha_noAq_df_div$Observed))
+
+```
+
+<br/>
+  
+  
+#### Simpson diversity
+
+```{r simpson diversity by treatment no Aqua}
+
+ggplot(alpha_noAq_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  #scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
+  guides(fill = "none", shape = "none") +
+  ylab("Inv. Simpson index") +
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.box="vertical")
+
+```
+
+<br/>
+  
+  
+#### Shannon diversity
+
+```{r shannon diversity by treatment no Aqua}
+
+ggplot(alpha_noAq_df_div, aes(x = Treatment, y = Shannon, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  #scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
+  guides(fill = "none", shape = "none") +
+  ylab("Shannon index")+
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.box="vertical")
+
+```
+
+
+<br/>
+  
+  
+#### Species richness
+
+```{r richness by treatment no Aqua}
+
+ggplot(alpha_noAq_df_div, aes(x = Treatment, y = Observed, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  #scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
+  guides(fill = "none", shape = "none") +
+  ylab("ASV richness")+
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.box="vertical")
+
+```
+
+<br/>
+  
+  
+#### Evenness
+
+```{r evenness by treatment no Aqua}
+
+ggplot(alpha_noAq_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  #scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
+  guides(fill = "none", shape = "none") +
+  ylab("Evenness")+
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.box="vertical")
+
+```
+
+<br/>
+<br/>
+
+
+### Beta Diversity 
+
+```{r PCoA no aqua}
+
+## Ordination of all taxa
+#rel abun
+pseq_noA_rel_ord <- plot_ordination(gen_rick_rel, ordinate(gen_rick_rel,"PCoA", "bray"), color = "Treatment", shape = "Genotype", justDF = TRUE) 
+eigvec_noA_rel <- ordinate(gen_rick_rel, "PCoA", "bray")$values["Eigenvalues"]
+percvar_noA_rel <- round(100 * eigvec_noA_rel[1:2,]/sum(eigvec_noA_rel), 1)
+
+
+
+### Dispersion stats of core taxa 
+seq_noA_all <- data.frame(otu_table(gen_rick_rel)) # pull the otu table from the core object
+dist_noA_all <- vegdist(seq_noA_all) # calculate Bray-Curtis distances between samples
+samdf_noA_all <- data.frame(sample_data(gen_rick_rel)) # pull sample data from the core phyloseq object
+bet_noA_all <- betadisper(dist_noA_all, samdf_noA_all$Treatment)
+
+# Run the ANOVA
+all_noA_anova <- anova(bet_noA_all)
+all_noA_anova
+plot(bet_noA_all) # plot the treatments and distances to centroids on the
+boxplot(bet_noA_all) # boxplot of the distances to centroid for each treatment
+
+## Dispersion by genotype: not significant 
+#dist_all_gen <- betadisper(dist_all, samdf_all$Genotype)
+#anova(dist_all_gen)
+
+## Test of pairwise (treatment and genotype models)
+#permutest(bet_all, pairwise = TRUE, permutations = 999) # not significant
+#permutest(dist_all_gen, pairwise = TRUE, permutations = 999) # not significant
+    
+
+
+### Multivariate stats (PERMANOVA)
+all_noA_adonis <- adonis2(seq_noA_all ~ Treatment + Genotype, data = samdf_noA_all, permutations = 1500)
+all_noA_adonis
+
+
+## plot
+pcoa_noA_plot <- ggplot(data = pseq_noA_rel_ord, aes(x = Axis.1, y = Axis.2, colour = Treatment, fill = Treatment, group = Treatment, shape = Treatment)) +
+  geom_point(size = 3, alpha = 0.3) +
+  stat_ellipse()+
+  theme_bw()+
+  theme(panel.grid = element_blank(), legend.position = c(0.21, 0.17), legend.key.size = unit(0.4, 'cm')) +
+  #scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  guides(colour = "none",
+         fill = guide_legend(override.aes = list(alpha = 1))) +
+  labs(x = paste0("Axis 1 (", percvar_rel[1], "%)"),
+       y = paste0("Axis 2 (", percvar_rel[2], "%)"))
+
+```
+
+```{r centroid dist no aqua}
+
+dis_noA <- data.frame(Treatment = bet_all$group, dist = bet_all$distances, Genotype = samdf_all$Genotype)
+
+dist_noA_plot <- ggplot(dis_noA, aes(x = Treatment, y = dist, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(size = 3, alpha = 0.3, position = position_jitter(width = 0.2)) +
+  geom_boxplot(fill = NA, outlier.colour = NA) +
+  scale_color_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) +
+  #scale_shape_manual(values = gen_shape) +
+  #scale_shape_manual(values = c(0,1,2,3,4,5,6,7,8,9)) +
+  scale_shape_manual(values = c(21, 22, 23, 25)) +
+  ylab("Distance to centroid")+
+  xlab("Treatment") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.position = "none")
+
+```
+
+```{r combine no aqua beta diversity plots}
+
+ggarrange(pcoa_noA_plot, dist_noA_plot, common.legend = TRUE, legend = "bottom") + 
+  theme(plot.background = element_rect(fill = "white", colour = NA))
+
+## save
+ggsave("Figures/Exploratory/16S_noAqua_beta.png", height = 3.5, width = 7, dpi = 600)
+
+```
+
+<br/>
+<br/>
+
+
 ## Core vs. accessory microbiome {.tabset}
 
 ### Core
@@ -1610,6 +1857,7 @@ core_anova
 plot(bet_core) # plot the treatments and distances to centroids on the
 boxplot(bet_core) # boxplot of the distances to centroid for each treatment
 
+
 ## Dispersion by genotype: not significant 
 #bet_core_gen <- betadisper(dist_core, samdf_core$Genotype)
 #anova(bet_core_gen)
@@ -1618,7 +1866,6 @@ boxplot(bet_core) # boxplot of the distances to centroid for each treatment
 #permutest(bet_core, pairwise = TRUE, permutations = 999) # not significant
 #permutest(bet_core_gen, pairwise = TRUE, permutations = 999) # not significant
     
-
 ### Multivariate stats (PERMANOVA)
 core_adonis <- adonis2(seq_core ~ Treatment + Genotype, data = samdf_core, permutations = 1500)
 core_adonis
@@ -1646,7 +1893,6 @@ boxplot(bet_core_rel) # boxplot of the distances to centroid for each treatment
 #permutest(bet_core_rel, pairwise = TRUE, permutations = 999) # not significant
 #permutest(bet_rel_core_gen, pairwise = TRUE, permutations = 999) # not significant
     
-
 ### Multivariate stats (PERMANOVA)
 core_rel_adonis <- adonis2(seq_core_rel ~ Treatment + Genotype, data = samdf_core, permutations = 1500)
 core_rel_adonis
@@ -1666,7 +1912,6 @@ core_stat_plot <- core_plot +
   annotate("text", x = -0.8, y = -0.26, label = deparse(core_gen_pval), parse = TRUE, size = 4) 
 
 
-
 ## Add the stats to the core PCA plot (rel abund data)
 rel_core_disp_pval <- substitute(italic(P[disp])==p, list(p = format(core_rel_anova[[1,5]], digits = 2)))
 rel_core_trt_pval <- substitute(italic(P[treat])==p, list(p = format(core_rel_adonis[[1,5]], digits = 2)))
@@ -1676,8 +1921,6 @@ rel_core_stat_plot <- rel_core_plot +
   annotate("text", x = -0.6, y = 0.13, label = deparse(rel_core_disp_pval), parse = TRUE, size = 4) +
   annotate("text", x = 0.7, y = -0.19, label = deparse(rel_core_trt_pval), parse = TRUE, size = 4) +
   annotate("text", x = 0.7, y = -0.21, label = deparse(rel_core_gen_pval), parse = TRUE, size = 4) 
-
-
 
 ### Combine plots and make decision
 ggarrange(core_stat_plot, rel_core_stat_plot, common.legend = TRUE, legend = "bottom")
@@ -1691,13 +1934,12 @@ ggarrange(core_stat_plot, rel_core_stat_plot, common.legend = TRUE, legend = "bo
 
 ps_rare_trim_otu <- data.frame(phylo_trim_rare@otu_table)
 core_tax <- as.data.frame(tax_table(pseq_core)[,1:6]) # for some reason, the species and seqs columns are preventing the dataframe so cutting them
-
-
 core_ids <- c(rownames(core_tax)) # pull ASVs that are core
 ps_rare_trim_acc_otu <- ps_rare_trim_otu[,!colnames(ps_rare_trim_otu) %in% core_ids ] # select for non-core ASVs
 # rownames(samdf_cleanest) <- samdf_cleanest$sampleID # don't think I need this
 
-#r emake phyloseq object with just accessory
+
+#remake phyloseq object with just accessory
 phylo_acc <- phyloseq(otu_table(ps_rare_trim_acc_otu, taxa_are_rows = FALSE), 
                          sample_data(samdf_cleanest), 
                          tax_table(taxa_clean))
@@ -1722,7 +1964,6 @@ acc_plot <- ggplot(data = phylo_acc_ord, aes(x = Axis.1, y = Axis.2, colour = Tr
        y = paste0("Axis 2 (", percvar_acc[2], "%)")) +
   ggtitle("D.   Accessory taxa")
 acc_plot
-
 
 
 #rel abun
@@ -1756,6 +1997,7 @@ dist_acc <- vegdist(seq_acc) # calculate Bray-Curtis distances between samples
 samdf_acc <- data.frame(sample_data(phylo_acc)) # pull sample data from the acc phyloseq object
 bet_acc <- betadisper(dist_acc, samdf_acc$Treatment)
 
+
 # Run the ANOVA
 acc_anova <- anova(bet_acc)
 acc_anova
@@ -1770,7 +2012,6 @@ boxplot(bet_acc) # boxplot of the distances to centroid for each treatment
 #permutest(bet_acc, pairwise = TRUE, permutations = 999) # not significant
 #permutest(bet_acc_gen, pairwise = TRUE, permutations = 999) # not significant
 
-
 ### Multivariate stats (PERMANOVA)
 acc_adonis <- adonis2(seq_acc ~ Treatment + Genotype, data = samdf_acc, permutations = 1500)
 acc_adonis
@@ -1783,6 +2024,7 @@ acc_adonis
 seq_acc_rel <- data.frame(otu_table(phylo_acc_rel))
 dist_acc_rel <- vegdist(seq_acc_rel) # calculate Bray-Curtis distances between samples
 bet_acc_rel <- betadisper(dist_acc_rel, samdf_acc$Treatment)
+
 
 # Run the ANOVA
 acc_rel_anova <- anova(bet_acc_rel)
@@ -1797,7 +2039,6 @@ boxplot(bet_acc_rel) # boxplot of the distances to centroid for each treatment
 ## Test of pairwise (treatment and genotype models)
 #permutest(bet_acc_rel, pairwise = TRUE, permutations = 999) # not significant
 #permutest(bet_rel_acc_gen, pairwise = TRUE, permutations = 999) # not significant
-
 
 ### Multivariate stats (PERMANOVA)
 acc_rel_adonis <- adonis2(seq_acc_rel ~ Treatment + Genotype, data = samdf_acc, permutations = 1500)
@@ -1818,7 +2059,6 @@ acc_stat_plot <- acc_plot +
   annotate("text", x = -0.8, y = -0.26, label = deparse(acc_gen_pval), parse = TRUE, size = 4) 
 
 
-
 ## Add the stats to the acc PCA plot (rel abund data)
 rel_acc_disp_pval <- substitute(italic(P[disp])==p, list(p = format(acc_rel_anova[[1,5]], digits = 2)))
 rel_acc_trt_pval <- substitute(italic(P[treat])==p, list(p = format(acc_rel_adonis[[1,5]], digits = 2)))
@@ -1829,8 +2069,6 @@ rel_acc_stat_plot <- rel_acc_plot +
   annotate("text", x = 0.7, y = -0.19, label = deparse(rel_acc_trt_pval), parse = TRUE, size = 4) +
   annotate("text", x = 0.7, y = -0.21, label = deparse(rel_acc_gen_pval), parse = TRUE, size = 4) 
 
-
-
 ### Combine plots and make decision
 ggarrange(acc_stat_plot, rel_acc_stat_plot, common.legend = TRUE, legend = "bottom")
 
@@ -1838,6 +2076,7 @@ ggarrange(acc_stat_plot, rel_acc_stat_plot, common.legend = TRUE, legend = "bott
 
 <br/>
 <br/>
+
 
 ## Differentially abundant taxa {.tabset}
 
