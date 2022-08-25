@@ -560,17 +560,17 @@ As a final check of our progress, we can look at the number of reads that made i
 
 ```{r track reads through pipeline}
 
-track_reads <- cbind(meta[c(1,3,5)], filt_out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab_nochim))
+track_reads <- cbind(meta[1], paste(meta$Genotype, meta$Frag, sep = " "), meta[c(3,5)], filt_out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab_nochim))
 # If processing a single sample, remove the sapply calls: e.g. replace sapply(dadaFs, getN) with getN(dadaFs)
 
-colnames(track_reads) <- c("Sample ID", "Genotype", "Treatment", "Input", "Filtered", "Denoised Forward", "Denoised Reverse", "Merged", "Nonchimera")
+colnames(track_reads) <- c("Sample ID", "Sample", "Genotype", "Treatment", "Input", "Filtered", "Denoised Forward", "Denoised Reverse", "Merged", "Nonchimera")
 rownames(track_reads) <- sample_names
 
 ```
 
 ```{r kable of reads through pipeline}
 
-kable(track_reads[-1], row.names = FALSE) %>% 
+kable(track_reads, row.names = FALSE) %>% 
   #kable_minimal() %>% 
   kable_classic_2() %>% 
   kable_styling(font_size = 14, full_width = FALSE) %>% 
@@ -884,7 +884,24 @@ save(phylo_cleanest, seqtab_cleanest, samdf_cleanest, file = "Data/16s_data/phyl
 
 ```
 
-Looks good! We have now cleaned up the sample data to remove contamination from non target organisms and those from the negative controls.
+```{r pre rare and trim count info}
+
+## calculate mean and SD counts across samples
+preRare_count <- rowSums(otu_table(phylo_cleanest))
+mean_preRare <- mean(preRare_count) # mean counts
+sd_preRare <- sd(preRare_count) # standard deviation 
+
+
+
+# find min and max sample IDs
+otu_tab <- data.frame(otu_table(phylo_cleanest), sum = rowSums(otu_table(phylo_cleanest)))
+
+min_sample <- rownames(filter(otu_tab, sum == min(preRare_count)))
+max_sample <- rownames(filter(otu_tab, sum == max(preRare_count)))
+
+```
+
+Looks good! We have now cleaned up the sample data to remove contamination from non target organisms and those from the negative controls. The cleaned samples averaged `r round(mean_preRare, 0)` counts (+/- `r round(sd_preRare, 0)` SD).
 
 <br/>
 <br/>
@@ -928,7 +945,7 @@ phylo_rare # 1538 taxa in 19 sample     3231 taxa in 35 samples
 
 # removing missing taxa - lost after rarefying
 phylo_rare <- prune_taxa(taxa_sums(phylo_rare) > 0, phylo_rare)
-phylo_rare # 2498 in 35 samples after pruning     (1503 in 19 samples)
+phylo_rare # 3166 in 36 samples after pruning     (1503 in 19 samples)
 
 seqtab_rare <- data.frame(otu_table(phylo_rare))
 
@@ -2267,10 +2284,21 @@ Demultiplexed reads were pre-processed using bbmap (**CITE**) to remove adapters
 
 ## Results {.tabset}
 
-*Results text goes here*
+### Symbiodiniaceae community composition
+
+Statement of raw counts. After classification by Symportal, ITS2 counts ranged from 730–121,515 per sample across all 36 samples with a mean of 32,774 counts. All coral individuals hosted *Symbiodinium ‘fitti’* (ITS2 type A3) with 44% of individuals (n=16) hosting small background amounts of *Breviolum minutum* (ITS2 type B2).
+
+<br/>
+
+
+### *Acropora cervicornis* fragments are dominated by order Rickettsiales
+
+Trimmed and rarified 16S reads averaged `r format(round(mean_preRare, 0), scientific = FALSE)` ± `r format(round(sd_preRare, 0), scientific = FALSE)` (±SD) per sample across all *A. cervicornis* samples with a minimum of `r format(min(preRare_count), scientific = FALSE)` (Sample `r as.character(track_reads$Sample[track_reads$"Sample ID" == min_sample])`) and a maximum of `r format(max(preRare_count), scientific = FALSE)` (Sample `r as.character(track_reads$Sample[track_reads$"Sample ID" == max_sample])`). Fragments were dominated by taxa from the phylum Proteobacteria (**Figure 5A**), which was dominated by a single ASV (Genus MD3-55; Ca. Aquarickettsia) within the order Rickettsailes (**Figure 5B**; see **Supplemental Figure XX**). Beta diversity analyses did not identify any statistical differences across samples based experimental treatment or genotype (**Figure 5C and Table SXX**). Similarly, alpha diversity was indistinguishable across treatments (**Supplemental Figure SXX and Table SXX**). After removing Aquarickettsia from all samples to assess background bacterial communities, there were still no differences in alpha and beta diversity across treatments or genotypes (**Supplemental Figure SXX and Table SXX**).
 
 <br/>
 <br/>
+
+
 
 
 ## Figures {.tabset}
