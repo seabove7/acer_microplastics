@@ -38,6 +38,7 @@ body {
 library("knitr")
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 pdf.options(useDingbats = FALSE)
+options(knitr.kable.NA = '')
 
 ```
 
@@ -1137,7 +1138,7 @@ rick_plot <- plot_bar2(phylo_rick_rel, x = "Genotype", fill = "seqs_ps", colour 
                           element_rect(fill = opacity(trt_col, 0.3)[[2]]),
                           element_rect(fill = opacity(trt_col, 0.3)[[3]]),
                           element_rect(fill = opacity(trt_col, 0.3)[[4]])) )) +
-  ggtitle("Rickettsiales ASVs (relative abundance)")
+  ggtitle("Rickettsiales ASVs")
 rick_plot
 #ggplotly(rick_plot)
 
@@ -1449,8 +1450,8 @@ plot(bet_all) # plot the treatments and distances to centroids on the
 boxplot(bet_all) # boxplot of the distances to centroid for each treatment
 
 ## Dispersion by genotype: not significant 
-#dist_all_gen <- betadisper(dist_all, samdf_all$Genotype)
-#anova(dist_all_gen)
+dist_all_gen <- betadisper(dist_all, samdf_all$Genotype)
+all_gen_anova <- anova(dist_all_gen)
 
 ## Test of pairwise (treatment and genotype models)
 #permutest(bet_all, pairwise = TRUE, permutations = 999) # not significant
@@ -1594,8 +1595,8 @@ alpha_noAq_df_div$Evenness <- alpha_noAq_df_div$Shannon / (log(alpha_noAq_df_div
 
 ```{r simpson diversity by treatment no Aqua}
 
-ggplot(alpha_noAq_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, fill = Treatment, shape = Treatment)) +
-  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+simp_noR_plot <- ggplot(alpha_noAq_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 2, colour = "black") +
   geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
@@ -1607,6 +1608,7 @@ ggplot(alpha_noAq_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, 
   xlab("Treatment") +
   theme_bw() +
   theme(panel.grid = element_blank(), legend.box="vertical")
+simp_noR_plot
 
 ```
 
@@ -1617,8 +1619,8 @@ ggplot(alpha_noAq_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, 
 
 ```{r shannon diversity by treatment no Aqua}
 
-ggplot(alpha_noAq_df_div, aes(x = Treatment, y = Shannon, color = Treatment, fill = Treatment, shape = Treatment)) +
-  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+shan_noR_plot <- ggplot(alpha_noAq_df_div, aes(x = Treatment, y = Shannon, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 2, colour = "black") +
   geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
@@ -1630,9 +1632,9 @@ ggplot(alpha_noAq_df_div, aes(x = Treatment, y = Shannon, color = Treatment, fil
   xlab("Treatment") +
   theme_bw() +
   theme(panel.grid = element_blank(), legend.box="vertical")
+shan_noR_plot
 
 ```
-
 
 <br/>
   
@@ -1641,8 +1643,8 @@ ggplot(alpha_noAq_df_div, aes(x = Treatment, y = Shannon, color = Treatment, fil
 
 ```{r richness by treatment no Aqua}
 
-ggplot(alpha_noAq_df_div, aes(x = Treatment, y = Observed, color = Treatment, fill = Treatment, shape = Treatment)) +
-  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+rich_noR_plot <- ggplot(alpha_noAq_df_div, aes(x = Treatment, y = Observed, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 2, colour = "black") +
   geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
@@ -1654,6 +1656,7 @@ ggplot(alpha_noAq_df_div, aes(x = Treatment, y = Observed, color = Treatment, fi
   xlab("Treatment") +
   theme_bw() +
   theme(panel.grid = element_blank(), legend.box="vertical")
+rich_noR_plot
 
 ```
 
@@ -1664,8 +1667,8 @@ ggplot(alpha_noAq_df_div, aes(x = Treatment, y = Observed, color = Treatment, fi
 
 ```{r evenness by treatment no Aqua}
 
-ggplot(alpha_noAq_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, fill = Treatment, shape = Treatment)) +
-  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 4, colour = "black") +
+even_noR_plot <- ggplot(alpha_noAq_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, fill = Treatment, shape = Treatment)) +
+  geom_point(alpha = 0.3, position = position_jitter(width = 0.2), size = 2, colour = "black") +
   geom_boxplot(fill = NA, outlier.colour = NA) +
   scale_color_manual(values = trt_col) +
   scale_fill_manual(values = trt_col) +
@@ -1677,6 +1680,7 @@ ggplot(alpha_noAq_df_div, aes(x = Treatment, y = InvSimpson, color = Treatment, 
   xlab("Treatment") +
   theme_bw() +
   theme(panel.grid = element_blank(), legend.box="vertical")
+even_noR_plot
 
 ```
 
@@ -1709,8 +1713,8 @@ plot(bet_noA_all) # plot the treatments and distances to centroids on the
 boxplot(bet_noA_all) # boxplot of the distances to centroid for each treatment
 
 ## Dispersion by genotype: not significant 
-#dist_all_gen <- betadisper(dist_all, samdf_all$Genotype)
-#anova(dist_all_gen)
+dist_all_gen <- betadisper(dist_all, samdf_all$Genotype)
+all_genNoA_anova <- anova(dist_all_gen)
 
 ## Test of pairwise (treatment and genotype models)
 #permutest(bet_all, pairwise = TRUE, permutations = 999) # not significant
@@ -1762,8 +1766,9 @@ dist_noA_plot <- ggplot(dis_noA, aes(x = Treatment, y = dist, color = Treatment,
 
 ```{r combine no aqua beta diversity plots}
 
-ggarrange(pcoa_noA_plot, dist_noA_plot, common.legend = TRUE, legend = "bottom") + 
+beta_noR_plot <- ggarrange(pcoa_noA_plot, dist_noA_plot, common.legend = TRUE, legend = "bottom") + 
   theme(plot.background = element_rect(fill = "white", colour = NA))
+beta_noR_plot
 
 ## save
 ggsave("Figures/Exploratory/16S_noAqua_beta.png", height = 3.5, width = 7, dpi = 600)
@@ -2293,12 +2298,9 @@ Statement of raw counts. After classification by Symportal, ITS2 counts ranged f
 
 ### *Acropora cervicornis* fragments are dominated by order Rickettsiales
 
-Trimmed and rarified 16S reads averaged `r format(round(mean_preRare, 0), scientific = FALSE)` ± `r format(round(sd_preRare, 0), scientific = FALSE)` (±SD) per sample across all *A. cervicornis* samples with a minimum of `r format(min(preRare_count), scientific = FALSE)` (Sample `r as.character(track_reads$Sample[track_reads$"Sample ID" == min_sample])`) and a maximum of `r format(max(preRare_count), scientific = FALSE)` (Sample `r as.character(track_reads$Sample[track_reads$"Sample ID" == max_sample])`). Fragments were dominated by taxa from the phylum Proteobacteria (**Figure 5A**), which was dominated by a single ASV (Genus MD3-55; Ca. Aquarickettsia) within the order Rickettsailes (**Figure 5B**; see **Supplemental Figure XX**). Beta diversity analyses did not identify any statistical differences across samples based experimental treatment or genotype (**Figure 5C and Table SXX**). Similarly, alpha diversity was indistinguishable across treatments (**Supplemental Figure SXX and Table SXX**). After removing Aquarickettsia from all samples to assess background bacterial communities, there were still no differences in alpha and beta diversity across treatments or genotypes (**Supplemental Figure SXX and Table SXX**).
+Cleaned 16S reads before trimming and rarefaction averaged `r format(round(mean_preRare, 0), scientific = FALSE)` ± `r format(round(sd_preRare, 0), scientific = FALSE)` (±SD) per sample across all *A. cervicornis* samples with a minimum of `r format(min(preRare_count), scientific = FALSE)` (Sample `r as.character(track_reads$Sample[track_reads$"Sample ID" == min_sample])`) and a maximum of `r format(max(preRare_count), scientific = FALSE)` (Sample `r as.character(track_reads$Sample[track_reads$"Sample ID" == max_sample])`). Fragments were dominated by taxa from the phylum Proteobacteria (**Figure 5A**), which was dominated by a single ASV (Genus MD3-55; Ca. Aquarickettsia) within the order Rickettsiales (**Figure 5B**; see **Supplemental Figure XX**). Beta diversity analyses did not identify any statistical differences across samples based experimental treatment or genotype (**Figure 5C and Table SXX**). Similarly, alpha diversity was indistinguishable across treatments (**Supplemental Figure SXX and Table SXX**). After removing Aquarickettsia from all samples to assess background bacterial communities, there were still no differences in alpha and beta diversity across treatments or genotypes (**Supplemental Figure SXX and Table SXX**).
 
 <br/>
-<br/>
-
-
 
 
 ## Figures {.tabset}
@@ -2386,36 +2388,70 @@ ggsave("Figures/Figure5_16s_diversity.pdf", height = 9, width = 14, useDingbats 
 
 ## Supplemental figures {.tabset}
 
-### Figure SXX
+### Supplemental Figure 4
 
-```{r fig SXX alpha diversity, fig.align = 'center', fig.height = 7, fig.width = 8}
+```{r fig S4 rick ASVs, fig.align = 'center', fig.height = 7, fig.width = 8}
 
-figSX <- ggarrange(simp_stat_plot, shan_stat_plot, rich_stat_plot, even_stat_plot, common.legend = TRUE, labels = "AUTO", legend = "none") 
-figSX
+## renaming the rick ASV plot for supps
+figS4 <- rick_plot + theme(legend.title = element_blank(), legend.position = "bottom")
+figS4
 
 ## save figure 
-ggsave("Figures/Supplemental/FigureSX_alpha.png", height = 7, width = 8, dpi = 600)
-ggsave("Figures/Supplemental/FigureSX_alpha.pdf", height = 7, width = 8, useDingbats = FALSE)
+ggsave("Figures/Supplemental/FigureS4_RickettsialesASVs.png", height = 7, width = 8, dpi = 600)
+ggsave("Figures/Supplemental/FigureS4_RickettsialesASVs.pdf", height = 7, width = 8, useDingbats = FALSE)
 
 ```
 
-**Figure SX** Alpha diversity metrics across all samples in all treatments, depicting (**A**) Simpson index, (**B**) Shannon index, (**c**) species richness (ASVs), and (**D**) Evenness.
+**Supplemental Figure 4:** Relative abundance of the four identified ASVs within order Rickettsiales across all samples. Samples were dominated by ASV 37, with background presence of the other 3 ASVs.
 
 <br/>
 <br/>
 
 
-### Figure SXX
+### Supplemental Figure 5
 
-```{r fig SXX , fig.align = 'center', fig.height = 7, fig.width = 8}
+```{r fig S5 alpha diversity, fig.align = 'center', fig.height = 7, fig.width = 8}
 
-# ## save figure 
-# ggsave("Figures/Supplemental/FigureSX_alpha.png", height = 7, width = 8, dpi = 600)
-# ggsave("Figures/Supplemental/FigureSX_alpha.pdf", height = 7, width = 8, useDingbats = FALSE)
+figS5 <- ggarrange(simp_stat_plot, shan_stat_plot, rich_stat_plot, even_stat_plot, common.legend = TRUE, labels = "AUTO", legend = "right") 
+figS5
+
+## save figure 
+ggsave("Figures/Supplemental/FigureS5_alpha.png", height = 7, width = 8, dpi = 600)
+ggsave("Figures/Supplemental/FigureS5_alpha.pdf", height = 7, width = 8, useDingbats = FALSE)
 
 ```
 
-**Figure SX** Alpha diversity metrics across all samples in all treatments, depicting (**A**) Simpson index, (**B**) Shannon index, (**c**) species richness (ASVs), and (**D**) Evenness.
+**Supplemental Figure 5:** Alpha diversity metrics across all samples in all treatments, depicting (**A**) Simpson index, (**B**) Shannon index, (**C**) species richness (ASVs), and (**D**) Evenness.
+
+<br/>
+<br/>
+
+
+### Supplemental Figure 6
+
+```{r fig S6 no rick diversity, fig.align = 'center', fig.height = 7, fig.width = 8}
+
+## set the layout
+layoutS6 <- "
+AABBCCDD
+##EEFF##
+"
+
+## remove legend from the beta diversity distance
+dist_noA_plot <- dist_noA_plot + theme(legend.position = "none")
+
+
+## add plots together with layout
+figS6 <- simp_noR_plot + shan_noR_plot + rich_noR_plot + even_noR_plot + pcoa_noA_plot + dist_noA_plot + plot_layout(design = layoutS6, guides = "collect") + plot_annotation(tag_levels = 'A')
+figS6
+
+## save figure 
+ggsave("Figures/Supplemental/FigureS6_roRock_alpha.png", height = 6, width = 16, dpi = 600)
+ggsave("Figures/Supplemental/FigureS6_roRock_alpha.pdf", height = 6, width = 16, useDingbats = FALSE)
+
+```
+
+**Supplemental Figure 5:** Alpha (**A-D**) and beta (**E-F**) diversity metrics across all samples in all treatments once Aquarickettsia ASVs were removed. Plots depict (**A**) Simpson index, (**B**) Shannon index, (**C**) species richness, (**D**) Evenness, (**E**) multivariate ordination plots (PCoA) of between-sample Bray–Curtis dissimilarity of rarefied ASVs and (**F**) distance to treatment centroids. PCoA ellipses depict 95% confidence intervals and p-values indicate significance of treatment and genotype. Treatment is depicted by color in all panels: blue = ambient conditions (AMB), orange = ocean acidification and warming (OAW), red = microplastics (MP), and dark red = OAW and MP (OAW+MP).
 
 <br/>
 <br/>
@@ -2423,7 +2459,138 @@ ggsave("Figures/Supplemental/FigureSX_alpha.pdf", height = 7, width = 8, useDing
 
 ## Supplemental tables {.tabset}
 
-```{r}
+### Table S3
+
+**Table S3:** Statistical model output of beta diversity assessments of all ASVs based on (**A**) treatment and (**B**) genotype.
+```{r table S3}
+
+## anova of the betadisper of all ASVs
+beta_all_anova <- rbind(all_anova, all_gen_anova)
+
+## table 3A: ANOVA 
+kable(beta_all_anova, row.names = TRUE, digits = 2, caption = "A) ANOVA of all ASV dispersion") %>% 
+  kable_classic_2() %>% 
+  kable_styling(font_size = 14, full_width = FALSE) %>% 
+  #column_spec(1, bold = TRUE) %>% 
+  column_spec(1, border_right = TRUE) %>% 
+  pack_rows("Treatment", 1, 2) %>% 
+  pack_rows("Genotype", 3, 4)
+
+
+## table 3B: PERMANOVA
+kable(all_adonis, row.names = TRUE, digits = 2, caption = "B) PERMANOVA of all ASVs") %>% 
+  kable_classic_2() %>% 
+  kable_styling(font_size = 14, full_width = FALSE) %>% 
+  add_indent(c(3, 4)) %>% 
+  column_spec(1, border_right = TRUE) %>% 
+  row_spec(3:4, italic = TRUE)
+
+```
+
+<br/>
+<br/>
+
+
+### Table S4
+
+**Table S4:** Statistical model output of alpha diversity assessments of all ASVs.
+```{r table S4}
+
+## combine all alpha of all ASVs
+simp_sum <- data.frame(metric = c(rep("simpson", 4)), summary(simp_lm)[["coefficients"]])
+shan_sum <- data.frame(metric = c(rep("shannon", 4)), summary(shan_lm)[["coefficients"]])
+rich_sum <- data.frame(metric = c(rep("richness", 4)), summary(rich_lm)[["coefficients"]])
+even_sum <- data.frame(metric = c(rep("evenness", 4)), summary(even_lm)[["coefficients"]])
+
+## combine summaries and remove numerics from rownames
+alpha_allASVs <- rbind(simp_sum, shan_sum, rich_sum, even_sum)
+alpha_allASVs <- add_column(alpha_allASVs, ` ` = rownames(alpha_allASVs), .before = "metric")
+alpha_allASVs$` ` <- gsub("[0-9]", "", alpha_allASVs$` `)
+
+
+## table 4: all alpha stats
+kable(alpha_allASVs[-2], row.names = FALSE, digits = 2) %>% 
+  kable_classic_2() %>% 
+  kable_styling(font_size = 14, full_width = FALSE) %>% 
+  #column_spec(1, bold = TRUE) %>% 
+  pack_rows("Simpson", 1, 4) %>% 
+  pack_rows("Shannon", 5, 8) %>% 
+  pack_rows("Richness", 9, 12) %>% 
+  pack_rows("Evenness", 13, 16)
+
+```
+
+<br/>
+<br/>
+
+
+### Table S5
+
+```{r table S5 df creation}
+
+## anova of the betadisper of all ASVs
+beta_noA_anova <- rbind(all_noA_anova, all_genNoA_anova)
+
+
+
+#### Alpha stats
+
+library(lme4)
+library(lmerTest)
+
+## construct models (GLMER is used for data that could not be transformed to meet normal assumptions)
+simp_mod_noA <- glmer(InvSimpson ~ Treatment + (1|Genotype), family = Gamma, data = alpha_noAq_df_div)
+shan_mod_noA <- lmer(sqrt(Shannon) ~ Treatment + (1|Genotype), data = alpha_noAq_df_div)
+rich_mod_noA <- lmer(log(Observed) ~ Treatment + (1|Genotype), data = alpha_noAq_df_div)
+even_mod_noA <- glmer(Evenness ~ Treatment + (1|Genotype), family = Gamma, data = alpha_noAq_df_div)
+
+
+
+## combine all alpha of all ASVs
+simp_noA_sum <- data.frame(metric = c(rep("simpson", 4)), summary(simp_mod_noA)[["coefficients"]]) %>% rename("Pvalue" = Pr...z..)
+shan_noA_sum <- data.frame(metric = c(rep("shannon", 4)), summary(shan_mod_noA)[["coefficients"]])[-4] %>% rename("Pvalue" = Pr...t..)
+rich_noA_sum <- data.frame(metric = c(rep("richness", 4)), summary(rich_mod_noA)[["coefficients"]])[-4] %>% rename("Pvalue" = Pr...t..)
+even_noA_sum <- data.frame(metric = c(rep("evenness", 4)), summary(even_mod_noA)[["coefficients"]]) %>% rename("Pvalue" = Pr...z..)
+
+## combine summaries and remove numerics from rownames
+alpha_noA <- rbind(simp_noA_sum, shan_noA_sum, rich_noA_sum, even_noA_sum)
+alpha_noA <- add_column(alpha_noA, ` ` = rownames(alpha_noA), .before = "metric")
+alpha_noA$` ` <- gsub("[0-9]", "", alpha_noA$` `)
+
+```
+
+
+**Table S5:** Non-Aquarickettsia ASV beta (**A-B**) and alpha (**C**) diversity across samples.
+```{r render the tables for S5}
+
+## table 5A: ANOVA of non aqua ASVs
+kable(beta_noA_anova, row.names = TRUE, digits = 2, caption = "A) ANOVA of non Aquarickettsia dispersion") %>% 
+  kable_classic_2() %>% 
+  kable_styling(font_size = 14, full_width = FALSE) %>% 
+  #column_spec(1, bold = TRUE) %>% 
+  column_spec(1, border_right = TRUE) %>% 
+  pack_rows("Treatment", 1, 2) %>% 
+  pack_rows("Genotype", 3, 4)
+
+
+## table 5B: PERMANOVA of non aqua ASVs
+kable(all_noA_adonis, row.names = TRUE, digits = 2, caption = "B) PERMANOVA of non Aquarickettsia") %>% 
+  kable_classic_2() %>% 
+  kable_styling(font_size = 14, full_width = FALSE) %>% 
+  add_indent(c(3, 4)) %>% 
+  column_spec(1, border_right = TRUE) %>% 
+  row_spec(3:4, italic = TRUE)
+
+
+## table 5C: all alpha stats of non aqua ASVs
+kable(alpha_noA[-2], row.names = FALSE, digits = 2, caption = "C) Alpha diversity metrics of non Aquarickettsia") %>% 
+  kable_classic_2() %>% 
+  kable_styling(font_size = 14, full_width = FALSE) %>% 
+  #column_spec(1, bold = TRUE) %>% 
+  pack_rows("Simpson", 1, 4) %>% 
+  pack_rows("Shannon", 5, 8) %>% 
+  pack_rows("Richness", 9, 12) %>% 
+  pack_rows("Evenness", 13, 16)
 
 ```
 
