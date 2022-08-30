@@ -966,8 +966,7 @@ save(phylo_rare, seqtab_rare, samdf_cleanest, taxa_clean, file = "Data/16s_data/
 
 load(file = "Data/16s_data/phylo_clean.Rdata")
 
-#formatting the table for mcmc.otu - requires one first column that's 1 through whatever
-#& has "X" as column name
+#formatting the table for mcmc.otu - requires one first column that's 1 through whatever & has "X" as column name
 nums <- 1:nrow(seqtab_cleanest) 
 samples <- rownames(seqtab_cleanest)
 
@@ -975,14 +974,14 @@ int <- cbind(sample = 0, seqtab_cleanest)
 seq_formcmc <- cbind(X = 0, int)
 
 seq_formcmc$X <- nums
-seq_formcmc$sample <- samples
+seq_formcmc$sample <- samples #3:3274
 
-seq_trim_allinfo <- purgeOutliers(seq_formcmc, count.columns = 3:3274, sampleZcut = -2.5, otu.cut = 0.0001, zero.cut = 0.02)
+seq_trim_allinfo <- purgeOutliers(seq_formcmc, count.columns = 3:length(seq_formcmc), sampleZcut = -2.5, otu.cut = 0.0001, zero.cut = 0.02)
 # no bad samples identified
 # 260 ASVs in 35 samples pass filters (416 ASVs in 19 samples)
 
 #remove sample info
-seq_trim <- seq_trim_allinfo[,3:262] 
+seq_trim <- seq_trim_allinfo[,3:length(seq_trim_allinfo)] 
 
 
 #remake phyloseq objects
@@ -1040,14 +1039,14 @@ seqtab_trim_rare <- rrarefy(seqtab_less, sample = raremax_trim) # generate one r
 rarecurve(seqtab_trim_rare, step = 20, sample = raremax_trim, col = "blue", cex = 0.6, label = TRUE) 
 
 #phyloseq object but rarefied & trimmed
-phylo_trim_rare <- phyloseq(otu_table(seqtab_trim_rare, taxa_are_rows=FALSE), 
+seqtab_trim_rare <- phyloseq(otu_table(seqtab_trim_rare, taxa_are_rows=FALSE), 
                     sample_data(samdf_trim), 
                     tax_table(taxa_clean))
-phylo_trim_rare # 260 taxa remain
+seqtab_trim_rare # 260 taxa remain
 
 
 ## Save the trimmed and rarefied data
-save(phylo_trim_rare, seqtab_trim_rare, samdf_trim, taxa_clean, file = "Data/16s_data/phylo_trim_rare.Rdata")
+save(seqtab_trim_rare, seqtab_trim_rare, samdf_trim, taxa_clean, file = "Data/16s_data/seqtab_trim_rare.Rdata")
 
 ```
 
@@ -1066,13 +1065,13 @@ Visualize alpha-diversity - Should be done on raw, untrimmed dataset
 
 ```{r barplot phylum of all samples}
 
-load(file = "Data/16s_data/phylo_clean.Rdata")
+load(file = "Data/16s_data/phylo_trim.Rdata")
 
 ## Phyla of all trimmed and rarefied ASVs
-phylo_trim_rare_rel <- transform_sample_counts(phylo_trim_rare, function(x) x / sum(x))
-phylo_trim_rare_rel_df <- data.frame(tax_table(phylo_trim_rare_rel))
+phylo_trim_rel <- transform_sample_counts(phylo_trim, function(x) x / sum(x))
+phylo_trim_rel_df <- data.frame(tax_table(phylo_trim_rel))
 
-trim_rare_rel_phyla <- plot_bar2(phylo_trim_rare_rel, x = "Genotype", fill="Phylum", colour="Phylum")+
+trim_rare_rel_phyla <- plot_bar2(phylo_trim_rel, x = "Genotype", fill="Phylum", colour="Phylum")+
   geom_bar(stat="identity") +
   theme_bw() +
   theme(panel.grid = element_blank(), legend.position = "bottom", ) +
@@ -1095,7 +1094,7 @@ Samples appear to be dominated by taxa within the phylum Proteobacteria. Next, I
 ```{r barplot proto order of all samples}
 
 ## Selecting just Phylum Proteobacteria 
-phylo_proteo <- subset_taxa(phylo_trim_rare, Phylum %in% "Proteobacteria")
+phylo_proteo <- subset_taxa(phylo_trim, Phylum %in% "Proteobacteria")
 phylo_proteo_rel <- transform_sample_counts(phylo_proteo, function(x) x / sum(x))
 
 proteo_plot <- plot_bar2(phylo_proteo_rel, x = "Genotype", fill = "Order", colour = "Order")+
@@ -1177,8 +1176,8 @@ load(file = "Data/16s_data/phylo_trim.Rdata")
 phylo_trim # 257 trimmed across all 36 samples
 
 ## Load the trimmed and rarefied phylo objects
-load(file = "Data/16s_data/phylo_trim_rare.Rdata")
-phylo_trim_rare # 257 rarefied and trimmed across all 36 samples
+load(file = "Data/16s_data/phylo_trim.Rdata")
+phylo_trim # 257 rarefied and trimmed across all 36 samples
 
 ```
 
@@ -1431,16 +1430,16 @@ ggarrange(simp_stat_plot, shan_stat_plot, rich_stat_plot, even_stat_plot, common
 
 ## Ordination of all taxa
 #rel abun
-pseq_rel_ord <- plot_ordination(phylo_trim_rare_rel, ordinate(phylo_trim_rare_rel,"PCoA", "bray"), color = "Treatment", shape = "Genotype", justDF = TRUE) 
-eigvec_rel <- ordinate(phylo_trim_rare_rel,"PCoA", "bray")$values["Eigenvalues"]
+pseq_rel_ord <- plot_ordination(phylo_trim_rel, ordinate(phylo_trim_rel,"PCoA", "bray"), color = "Treatment", shape = "Genotype", justDF = TRUE) 
+eigvec_rel <- ordinate(phylo_trim_rel,"PCoA", "bray")$values["Eigenvalues"]
 percvar_rel <- round(100 * eigvec_rel[1:2,]/sum(eigvec_rel), 1)
 
 
 
 ### Dispersion stats of core taxa 
-seq_all <- data.frame(otu_table(phylo_trim_rare_rel)) # pull the otu table from the core object
+seq_all <- data.frame(otu_table(phylo_trim_rel)) # pull the otu table from the core object
 dist_all <- vegdist(seq_all) # calculate Bray-Curtis distances between samples
-samdf_all <- data.frame(sample_data(phylo_trim_rare_rel)) # pull sample data from the core phyloseq object
+samdf_all <- data.frame(sample_data(phylo_trim_rel)) # pull sample data from the core phyloseq object
 bet_all <- betadisper(dist_all, samdf_all$Treatment)
 
 # Run the ANOVA
@@ -1505,8 +1504,8 @@ ggsave("Figures/Exploratory/16S_PCoA_all.png", height = 5, width = 10, dpi = 600
 
 
 
- top20 <- names(sort(taxa_sums(phylo_trim_rare), decreasing=TRUE))[1:20]
- ps.top20 <- transform_sample_counts(phylo_trim_rare, function(OTU) OTU/sum(OTU))
+ top20 <- names(sort(taxa_sums(phylo_trim), decreasing=TRUE))[1:20]
+ ps.top20 <- transform_sample_counts(phylo_trim, function(OTU) OTU/sum(OTU))
  ps.top20 <- prune_taxa(top20, ps.top20)
  ps.top20 <- transform_sample_counts(ps.top20, function(OTU) OTU/sum(OTU))
  
@@ -1542,7 +1541,7 @@ load(file = "Data/16s_data/phylo_clean.Rdata")
 
 
 ## Selecting just Phylum Proteobacteria 
-gen_rick <- subset_taxa(phylo_trim_rare, Genus != "MD3-55")
+gen_rick <- subset_taxa(phylo_trim, Genus != "MD3-55")
 gen_rick_rel <- transform_sample_counts(gen_rick, function(x) x / sum(x))
 
 no_rick_barplot <- plot_bar2(gen_rick_rel, x = "Genotype", fill = "Class", colour = "Class")+
@@ -1786,7 +1785,7 @@ ggsave("Figures/Exploratory/16S_noAqua_beta.png", height = 3.5, width = 7, dpi =
 ```{r ID core taxa}
 
 ## IDing core taxa from the trimmed, rarefied data (in 70% of samples)
-pseq_core <- core(phylo_trim_rare, detection = 0, prevalence = 0.99)
+pseq_core <- core(phylo_trim, detection = 0, prevalence = 0.99)
 pseq_core # 4 core taxa
 
 phylo_core_genus<- tax_glom(pseq_core, "Genus")
@@ -1851,7 +1850,7 @@ rel_core_plot
 ## calculating core abundances 
 core_sqs <- tax_table(pseq_core) # pull taxa table (core, trim, rare)
 core_sqs_ids <- rownames(core_sqs) # pull ASV names of the core taxa
-ps_rare_trim_rel <- transform_sample_counts(phylo_trim_rare, function(x) x / sum(x)) # calc rel abund of the rare core
+ps_rare_trim_rel <- transform_sample_counts(phylo_trim, function(x) x / sum(x)) # calc rel abund of the rare core
 seq_rare_rel <- data.frame(otu_table(ps_rare_trim_rel)) # make dataframe of the rel phylo object(above) for otus
 tax_core <- tax_table(ps_rare_trim_rel) # pull the taxa table of core
 seq_core <- seq_rare_rel %>% select(c(core_sqs_ids)) # select for the core ASVs only
@@ -1954,7 +1953,7 @@ ggarrange(core_stat_plot, rel_core_stat_plot, common.legend = TRUE, legend = "bo
 
 ```{r accessory taxa from rare trim}
 
-ps_rare_trim_otu <- data.frame(phylo_trim_rare@otu_table)
+ps_rare_trim_otu <- data.frame(phylo_trim@otu_table)
 core_tax <- as.data.frame(tax_table(pseq_core)[,1:6]) # for some reason, the species and seqs columns are preventing the dataframe so cutting them
 core_ids <- c(rownames(core_tax)) # pull ASVs that are core
 ps_rare_trim_acc_otu <- ps_rare_trim_otu[,!colnames(ps_rare_trim_otu) %in% core_ids ] # select for non-core ASVs
@@ -2161,6 +2160,42 @@ No differentially abundant taxa were identified!
 
 # **ITS2 Assessment** {.tabset}
 
+### Counts per sample
+
+```{r raw counts of its2 reads}
+
+## read in raw counts and rename things
+its_rawcounts <- read.csv("Data/ITS2_data/rawcounts.csv", header = FALSE) %>% 
+  rename(SampleID = V1, counts = V2) %>%  # rename columns
+  mutate(counts = as.numeric(counts), # convert counts to numeric
+         SampleID = factor(gsub("_R1_ITS.fastq.gz", "", SampleID))) # remove file extension from samples
+
+
+## read in the meta data to filter the desired samples (the full raw ITS2 list include counts from another project)
+meta_raw <- read.csv("Data/Acerv_MP_Metadata.csv") %>% 
+  filter(Treatment != "blank_control") # exclude meg controls
+
+## select for just the microplastic samples
+its_rawcounts <- its_rawcounts[its_rawcounts$SampleID %in% meta_raw$sampleID,]
+
+
+
+its_raw_df <- data.frame(mean = round(mean(its_rawcounts$counts), 0),
+                         max = max(its_rawcounts$counts),
+                         min = min(its_rawcounts$counts),
+                         sd = round(sd(its_rawcounts$counts), 0))
+
+```
+
+```{r kable of raw count stats}
+
+kable(its_raw_df, caption = "Raw count statistics of ITS2 samples") %>% 
+  kable_minimal() %>% 
+  kable_styling(font_size = 14, full_width = FALSE)
+
+```
+
+
 ```{r cleaning up its2 file, eval=FALSE, include=FALSE}
 
 df <- read.table("Data/ITS2_data/213_20220723T083504_DBV_20220723T141453.profiles.absolute.abund_and_meta.txt", sep = "\t")[c(-1:-6,-44, -45),-1] %>%
@@ -2187,6 +2222,42 @@ meta <- read.csv("Data/Acerv_MP_Metadata.csv") %>%
 
 ```
 
+```{r counts post symportal, include=FALSE}
+
+### This portion to calculate count stats was written and run by Annabel Huges:
+
+library(Rmisc)
+
+# all samples
+its_df_total <- cbind(its_df, total = rowSums(its_df)) # create a new column summing up counts for each sample
+symp_count_mean <- mean(its_df_total$total) # mean 
+symp_count_sd <- sd(its_df_total$total) # std dev
+symp_count_max <- max(its_df_total$total) # max counts
+symp_count_min <- min(its_df_total$total) # min counts
+
+# all samples - by treatment
+merge_all <- merge(its_df_total, meta, by = 0)
+summarySE(merge_all, measurevar = "total", groupvars = c("Treatment")) # stats based on counts per treatment
+max(merge_all$total)
+min(merge_all$total)
+
+```
+
+```{r kable of sym count stats}
+
+# combine stats into a dataframe
+its_sym_df <- data.frame(mean = round(mean(its_df_total$total), 0),
+                         max = max(its_df_total$total),
+                         min = min(its_df_total$total),
+                         sd = round(sd(its_df_total$total), 0))
+
+kable(its_sym_df, caption = "Post-SymPortal processing count statistics of ITS2 samples") %>% 
+  kable_minimal() %>% 
+  kable_styling(font_size = 14, full_width = FALSE)
+
+```
+
+
 ```{r its2 phyloseq object}
 
 ## Make taxa table for phyloseq
@@ -2206,6 +2277,10 @@ phylo_its2 <- phyloseq(sample_data(meta),
 # phylo_its2 # just a sanity to check that we have 6 taxa and 19 samples -- Looks good!
 
 ```
+
+<br/>
+<br/>
+
 
 ### Abundance by treatment and genotype
 
@@ -2268,30 +2343,29 @@ plot_bar2(its_rel_trt, x = "Treatment", fill = "majority_its2", colour = "majori
 
 # **Manuscript Materials**
 
-## Methods {.tabset}
+## Methods
 
 ### ITS2 and 16S metabarcoding
 
 DNA was extracted using an RNAqueous kit (ThermoFisher Scientific) as described above, except samples were not subjected to the DNA removal step. Internal transcribed spacer region 2 (ITS2) PCR amplification was performed using SYM_VAR_5.8S2 and SYM_VAR_REV primers (as described in Hume et al. 2013, 2015) using the following PCR profile: 26 cycles of 95℃ for 40 s, 59℃ for 2 min, 72℃ for 1 min and a final extension of 72℃ for 7 min. A negative control was included and it failed to amplify so it was not sequenced. PCR products were cleaned using the GeneJET PCR Purification kit (ThermoFisher Scientific) according to the manufacturer’s instructions. A second PCR was performed to dual-barcode samples before pooling, which was done based on the visualization of band intensity on a 1% agarose gel. 20 μl of the pool was run on a 2% SYBR Green gel for 100 min at 70 V. The target band was excised and placed in 30 μl of Milli-Q water overnight at 4℃. The supernatant concentration was measured using a DeNovix DS-11+ Spectrophotometer.   
 
-The V4 region of the 16S rRNA gene was amplified via PCR using Hyb515f and Hyb806R primers (Parada et al. 2016, Apprill et al. 2015) and the following PCR profile: 30 cycles of 95℃ for 40 s, 63℃ for 2 min, 72℃ for 1 min and a final extension of 7 min. Two negative controls using Milli-Q water were also prepared during the 16S library preparations and these samples were also sequenced. The same procedure as described above for the ITS2 samples was then followed. Concentrations of the ITS2 and 16S pools were used to combine the two pools in a 1:3 ratio respectively. Libraries were sequenced on Illumina MiSeq (paired-end 250 bp) at Tufts Genomics Core Facility. 
+The V4 region of the 16S rRNA gene was amplified via PCR using Hyb515f and Hyb806R primers (Parada et al. 2016, Apprill et al. 2015) and the following PCR profile: 30 cycles of 95℃ for 40 s, 63℃ for 2 min, 72℃ for 1 min and a final extension of 7 min. Two negative controls using Milli-Q water were also prepared during the 16S library preparations and these samples were also sequenced. The same procedure as described above for the ITS2 samples was then followed. Concentrations of the ITS2 and 16S pools were used to combine the two pools in a 1:3 ratio respectively. Libraries were sequenced on Illumina MiSeq (paired-end 250 bp) at Tufts Genomics Core Facility.   
 
+Demultiplexed reads were pre-processed using *bbmap* (Bushnell, 2014) to split ITS2 and 16S reads based on primers, while tossing reads that included neither primer. Resulting ITS2 reads were then analyzed by submitting paired fastq.gz files directly to *SymPortal*, which identifies specific sets of defining intragenomic ITS2 sequence variants (DIVs) to define ITS2 type profiles that are indicative of genetically differentiated Symbiodiniaceae taxa (Hume et al., 2019).   
 
-### ITS2 and 16S analyses
+16S primers were removed using cutadapt (Martin, 2011), then DADA2 (Callahan et al., 2016) was used to conduct quality filtering and inference of `r dim(phylo_sp@otu_table)[2]` sequence variants (ASVs) (see Table S2 to track reads lost through filtering). Taxonomy was assigned at 100% sequence identity using the Silva v. 138.1 database (Quast et al., 2013) and National Center for Biotechnology Information’s nucleotide database using blast+ (Camacho et al., 2009). ASVs matching mitochondria, chloroplasts, or non-bacterial kingdoms were removed (`r contam_tot` total) and `r neg_contam[[2]]` ASVs were removed based on negative controls as contaminants (Decontam; (Davis et al., 2018)). Cleaned counts were rarefied to `r raremax` using *vegan* (**CITE**) and trimmed using *MCM.OUT* (**CITE**) to remove ASVs present in less than 0.01% of counts, resulting in `r dim(phylo_trim@otu_table)[2]` ASVs across all 36 samples. 
 
-Demultiplexed reads were pre-processed using bbmap (**CITE**) to remove adapters and to split ITS2 and 16S reads based on primers. Resulting ITS2 reads were then analyzed using the SymPortal framework (Hume et al., 2019) by submitting paired fastq.gz files directly to SymPortal. Samples were subjected to standard sequence quality control protocols using MOTHUR 1.39.5 (Schloss et al., 2009), the BLAST+ suite of executables (Camacho et al., 2009), and minimum entropy decomposition (Eren et al., 2015). SymPortal identifies specific sets of defining intragenomic ITS2 sequence variants (DIVs) to define ITS2 type profiles that are indicative of genetically differentiated Symbiodiniaceae taxa (Hume et al., 2019). 
-
-16S primers were removed using cutadapt (**CITE**) and DADA2 (**CITE**) was used to conduct quality filtering and inference of `r dim(phylo_sp@otu_table)[2]` amplicon sequence variants (ASVs) (see Table SXX to track reads lost through filtering). 16S taxonomy was assigned using the Silva v. 138.1 database (**CITE**) and National Center for Biotechnology Information’s nucleotide database using blast+ (**CITE**). ASVs matching mitochondria, chloroplasts, or non-bacterial kingdoms were removed (`r contam_tot` total) and `r neg_contam[[2]]` ASVs were removed based on negative controls as contaminants (*Decontam*; (**CITE**)). Cleaned counts were then rarefied to `r raremax` per sample using vegan (**CITE**), trimmed using MCM.OUT (**CITE**) to remove ASVs present in less than 0.01% of counts, and then rarefied again to `r raremax_trim` resulting in `r dim(phylo_trim_rare@otu_table)[2]` ASVs. **DIVERSITY AND COMMUNITY ANALYSES**
+Beta diversity of the 16S trimmed counts based on treatment and genotype was assessed using a PCoA on Bray–Curtis dissimilarity (*Phyloseq* (McMurdie and Holmes 2013)) and a PERMANOVA (*vegan*; (Oksanen et al., 2020)). We then calculated alpha diversity (Shannon index, Simpson's index, ASV richness, and evenness) of the rarefied counts using *Phyloseq* (function estimate_richness(); (McMurdie and Holmes 2013)). Finally, to test for differences in background 16S communities, we removed all ASVs from the dominant genus MD3-55 (*Candidatus Aquarickettsia* rohweri, referred to as "*Aquarickettsia*"; (Klinges et al., 2019)) and performed the same beta and alpha diversity assessments. All ITS2 and 16S data, figures, and analyses were completed in (version 3.6.3; R Core Team (2020)) and can be found on GitHub ([https://github.com/seabove7/acer_microplastics](https://github.com/seabove7/acer_microplastics)).
 
 <br/>
 <br/>
 
 
-## Results {.tabset}
+## Results
 
 ### Symbiodiniaceae community composition
 
-Statement of raw counts. After classification by Symportal, ITS2 counts ranged from 730–121,515 per sample across all 36 samples with a mean of 32,774 counts. All coral individuals hosted *Symbiodinium ‘fitti’* (ITS2 type A3) with 44% of individuals (n=16) hosting small background amounts of *Breviolum minutum* (ITS2 type B2).
+Raw ITS2 counts before submission to *SymPortal* ranged from `r its_raw_df$min` to `r its_raw_df$max`, with a mean of `r its_raw_df$mean`. After classification by *SymPortal*, ITS2 counts ranged from `r symp_count_min` – `r symp_count_max` per sample across all 36 samples with mean `r round(symp_count_mean, 0)` counts. All coral individuals hosted *Symbiodinium ‘fitti’* (ITS2 type A3) with 44% of individuals (n=16) hosting small background amounts of *Breviolum minutum* (ITS2 type B2).
 
 <br/>
 
@@ -2459,10 +2533,52 @@ ggsave("Figures/Supplemental/FigureS6_roRock_alpha.pdf", height = 6, width = 16,
 
 ## Supplemental tables {.tabset}
 
-### Table S3
+### Table S1
 
-**Table S3:** Statistical model output of beta diversity assessments of all ASVs based on (**A**) treatment and (**B**) genotype.
-```{r table S3}
+**Table S1:** Environmental conditions measured in every tank every day throughout the experiment by treatment and specific to each tank (temperature = °C; dissolved oxygen = ppm ; salinity = ppt; pH = total scale).
+```{r table S1}
+
+env_df <- read.csv("Data/Acerv_MP_EnvData.csv", header = TRUE)[1:11] %>% 
+  mutate(Tank = factor(Tank))
+
+
+## Tank summary
+tank_summary <- env_df %>% 
+  group_by(ID) %>% 
+  dplyr::summarise(across(where(is.numeric), list(mean = mean, sd = sd, min = min, max = max), na.rm = TRUE)) %>% 
+  dplyr::rename(` ` = ID)
+  
+## Tank summary
+treat_summary <- env_df %>% 
+  group_by(Combined.Treatmenr) %>% 
+  dplyr::summarise(across(where(is.numeric), list(mean = mean, sd = sd, min = min, max = max), na.rm = TRUE)) %>% 
+  dplyr::rename(` ` = Combined.Treatmenr)
+
+
+## Combine them
+env_summary <- rbind(treat_summary, tank_summary)
+
+rep_list <- c("Mean", "SD", "Minimum", "Maximum")
+
+## makrdown version of supp table
+kable(env_summary, row.names = FALSE, digits = 2, col.names = c(" ", rep(rep_list, 4))) %>% 
+  kable_classic_2() %>% 
+  kable_styling(font_size = 10, full_width = FALSE) %>% 
+  add_header_above(c(" ", "Temperature" = 4, "Dissolved Oxygen" = 4, "Salinity" = 4, "pH" = 4)) %>%
+  pack_rows("Treatment", 1, 4) %>%
+  pack_rows("Tank", 5, 40) %>%
+  column_spec(c(1,5,9,13), border_right = TRUE)
+
+```
+
+<br/>
+<br/>
+
+
+### Table S4
+
+**Table S4:** Statistical model output of beta diversity assessments of all ASVs based on (**A**) treatment and (**B**) genotype.
+```{r table S4}
 
 ## anova of the betadisper of all ASVs
 beta_all_anova <- rbind(all_anova, all_gen_anova)
@@ -2491,10 +2607,10 @@ kable(all_adonis, row.names = TRUE, digits = 2, caption = "B) PERMANOVA of all A
 <br/>
 
 
-### Table S4
+### Table S5
 
-**Table S4:** Statistical model output of alpha diversity assessments of all ASVs.
-```{r table S4}
+**Table S5:** Statistical model output of alpha diversity assessments of all ASVs.
+```{r table S5}
 
 ## combine all alpha of all ASVs
 simp_sum <- data.frame(metric = c(rep("simpson", 4)), summary(simp_lm)[["coefficients"]])
@@ -2524,9 +2640,9 @@ kable(alpha_allASVs[-2], row.names = FALSE, digits = 2) %>%
 <br/>
 
 
-### Table S5
+### Table S6
 
-```{r table S5 df creation}
+```{r table S6 df creation}
 
 ## anova of the betadisper of all ASVs
 beta_noA_anova <- rbind(all_noA_anova, all_genNoA_anova)
@@ -2547,10 +2663,10 @@ even_mod_noA <- glmer(Evenness ~ Treatment + (1|Genotype), family = Gamma, data 
 
 
 ## combine all alpha of all ASVs
-simp_noA_sum <- data.frame(metric = c(rep("simpson", 4)), summary(simp_mod_noA)[["coefficients"]]) %>% rename("Pvalue" = Pr...z..)
-shan_noA_sum <- data.frame(metric = c(rep("shannon", 4)), summary(shan_mod_noA)[["coefficients"]])[-4] %>% rename("Pvalue" = Pr...t..)
-rich_noA_sum <- data.frame(metric = c(rep("richness", 4)), summary(rich_mod_noA)[["coefficients"]])[-4] %>% rename("Pvalue" = Pr...t..)
-even_noA_sum <- data.frame(metric = c(rep("evenness", 4)), summary(even_mod_noA)[["coefficients"]]) %>% rename("Pvalue" = Pr...z..)
+simp_noA_sum <- data.frame(metric = c(rep("simpson", 4)), summary(simp_mod_noA)[["coefficients"]]) %>% dplyr::rename("Pvalue" = Pr...z..)
+shan_noA_sum <- data.frame(metric = c(rep("shannon", 4)), summary(shan_mod_noA)[["coefficients"]])[-4] %>% dplyr::rename("Pvalue" = Pr...t..)
+rich_noA_sum <- data.frame(metric = c(rep("richness", 4)), summary(rich_mod_noA)[["coefficients"]])[-4] %>% dplyr::rename("Pvalue" = Pr...t..)
+even_noA_sum <- data.frame(metric = c(rep("evenness", 4)), summary(even_mod_noA)[["coefficients"]]) %>% dplyr::rename("Pvalue" = Pr...z..)
 
 ## combine summaries and remove numerics from rownames
 alpha_noA <- rbind(simp_noA_sum, shan_noA_sum, rich_noA_sum, even_noA_sum)
@@ -2560,10 +2676,10 @@ alpha_noA$` ` <- gsub("[0-9]", "", alpha_noA$` `)
 ```
 
 
-**Table S5:** Non-Aquarickettsia ASV beta (**A-B**) and alpha (**C**) diversity across samples.
-```{r render the tables for S5}
+**Table S6:** Non-Aquarickettsia ASV beta (**A-B**) and alpha (**C**) diversity across samples.
+```{r render the tables for S6}
 
-## table 5A: ANOVA of non aqua ASVs
+## table 6A: ANOVA of non aqua ASVs
 kable(beta_noA_anova, row.names = TRUE, digits = 2, caption = "A) ANOVA of non Aquarickettsia dispersion") %>% 
   kable_classic_2() %>% 
   kable_styling(font_size = 14, full_width = FALSE) %>% 
@@ -2573,7 +2689,7 @@ kable(beta_noA_anova, row.names = TRUE, digits = 2, caption = "A) ANOVA of non A
   pack_rows("Genotype", 3, 4)
 
 
-## table 5B: PERMANOVA of non aqua ASVs
+## table 6B: PERMANOVA of non aqua ASVs
 kable(all_noA_adonis, row.names = TRUE, digits = 2, caption = "B) PERMANOVA of non Aquarickettsia") %>% 
   kable_classic_2() %>% 
   kable_styling(font_size = 14, full_width = FALSE) %>% 
@@ -2582,7 +2698,7 @@ kable(all_noA_adonis, row.names = TRUE, digits = 2, caption = "B) PERMANOVA of n
   row_spec(3:4, italic = TRUE)
 
 
-## table 5C: all alpha stats of non aqua ASVs
+## table 6C: all alpha stats of non aqua ASVs
 kable(alpha_noA[-2], row.names = FALSE, digits = 2, caption = "C) Alpha diversity metrics of non Aquarickettsia") %>% 
   kable_classic_2() %>% 
   kable_styling(font_size = 14, full_width = FALSE) %>% 
