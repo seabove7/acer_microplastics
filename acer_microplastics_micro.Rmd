@@ -1,5 +1,5 @@
 ---
-title: "Microbiome assessment for *A. cervicornis* microplastics project (16S and ITS2)"
+title: "**Exposure to global change and microplastics elicits an immune response in an endangered coral**"
 date: "*Last run on `r format(Sys.time(), '%d %B %Y')`*"
 output: 
   html_document:
@@ -32,6 +32,41 @@ body {
     color: #212F3D;}
 </style>
 
+<br/>
+
+
+#### **Colleen B. Bove^1\*^, Katharine Greene^1^, Sharla Sugierski^2^, Nicola G. Kriefall^1^, Alexa K. Huzar^1^, Annabel M. Hughes^1^, Koty Sharp^3^, Nicole D. Fogarty^2^, Sarah W. Davies^1\*^**
+
+
+^1^ Department of Biology, Boston University, Boston, MA USA
+
+^2^ Department of Biology and Marine Biology, Center for Marine Science, University of North Carolina Wilmington, Wilmington, NC USA
+
+^3^ Department of Biology, Marine Biology, and Environmental Science, Roger Williams University, Bristol, RI, USA
+
+*Corresponding authors: Colleen B. Bove (colleenbove@gmail.com) and Sarah W. Davies (daviessw@bu.edu)
+
+<br/>
+
+
+#### **Abstract:**
+
+Global change is increasing seawater temperatures and decreasing oceanic pH, driving declines of coral reefs globally. Coral ecosystems are also impacted by local stressors, including microplastics, which are ubiquitous on reefs. While the independent effects of these global and local stressors are well-documented, their interactions remain less explored. Here, we examine the independent and combined effects of global change (ocean warming and acidification) and microplastics exposures on gene expression (GE) and microbial community composition in the endangered coral *Acropora cervicornis*. Nine genotypes were fragmented and maintained in one of four experimental treatments: 1) ambient conditions (ambient seawater, no microplastics; AMB); 2) microplastics treatment (ambient seawater, microplastics; MP); 3) global change conditions (warm and acidic conditions, no microplastics; OAW); and 4) multistressor treatment (warm and acidic conditions with microplastics; OAW+MP) for 21 days after which corals were sampled for genome-wide GE profiling and ITS and 16S metabarcoding. Overall *A. cervicornis* GE responses to all treatments were subtle; however, corals in the multistressor treatment exhibited the strongest GE responses, and gene ontology enrichment analyses showcased that genes associated with innate immunity were overrepresented in this treatment. 16S analyses showcased that microbiomes were dominated by the bacterial symbiont Aquarickettsia and were stable, suggesting that *A. cervicornis* exhibited remarkably low variability in community composition, and future work should focus on functional differences across these bacterial communities as well as the influence of viruses in these responses. Overall, results suggest that local stressors present a unique challenge to endangered coral species under global change.
+
+<br/>
+
+##### **Citation:**
+*Goes here*
+
+
+*Repository DOI hosted on Zenodo* [![DOI](https://zenodo.org)
+
+
+<br/>
+
+## Microbiome assessment (16S and ITS2) for *A. cervicornis* microplastics project 
+
+This repository contains all code and metadata necessary for the 16S and ITS2 analyses. The code used to assess the gene expression profiles in the manuscript can be found on Sarah Davies' GitHub repository [https://github.com/daviessw/Acer_OAW-Microplastics](https://github.com/daviessw/Acer_OAW-Microplastics).
 
 ```{r set some defaults, echo = FALSE}
 
@@ -1116,6 +1151,21 @@ ggplotly(proteo_plot)
 ```
 
 Again, there is a clear dominance across samples by a single order (Rickettsiales), regardless of experimental treatment. I have selected just this order to view the different ASVs that make up this order.
+
+```{r count aqua abundance to report min max}
+
+## make dataframe from the rel abundance of all ASVs (before selecting any particular taxa)
+otu_df <- data.frame(phylo_trim_rel@otu_table)
+
+# min aquarick abundance (ASV 1)
+aqua_min <- round((min(otu_df$ASV1) * 100), 1)
+
+# max aquarick abundance
+aqua_max <- round((max(otu_df$ASV1) * 100), 1)
+
+```
+
+
 
 ```{r barplot Rickettsiales ASVs}
 
