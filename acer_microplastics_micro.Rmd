@@ -142,7 +142,7 @@ library(shades)
 ```{r setup standards}
 
 ## Set the treatment colours:
-trt_col <- c("dodgerblue", "darkorange","firebrick2", "firebrick4")
+trt_col <- c("#abd9e9", "#2c7bb6","#fdae61", "#d7191c")
 
 ## Set genotype shapes:
 gen_shape <- c(21, 22, 23, 24, 25)
@@ -151,6 +151,12 @@ gen_shape <- c(21, 22, 23, 24, 25)
 ## Sourcing functions from external R scripts
 source("Misc_functions/other_functions.R") # some custom functions 
 source("Misc_functions/ancom.R") # these are the ANCOM functions
+
+
+### Rename the treatment levels in the metadata file and save this new metadata file on 20 Oct 2022 
+# meta_update <- read.csv("Data/Acerv_MP_Metadata.csv")
+# levels(meta_update$Treatment) <- c("AMB", "MP", "blank_control", "OAW", "OAW+MP") 
+# write.csv(meta_update, "Data/Acerv_MP_Metadata.csv", row.names = FALSE)
 
 ```
 
@@ -201,7 +207,7 @@ keep_samples <- c("10aA - 1", "5aC - 2", "10aB - 1", "6D - 1", "5aC - 1", "6B - 
 ## read in the meta data from the samples
 meta <- read.csv("Data/Acerv_MP_Metadata.csv") %>% 
   #filter(Genotype %in% keep_samples) %>% # select for only the GE-matching samples
-  separate(Genotype, c("Genotype", "Frag"), sep = "(?=[A-Z])") 
+  separate(Genotype, c("Genotype", "Frag"), sep = "(?=[A-Z])")
 
 
 # filter the sample name list to select neg controls and microplastic samples only
@@ -997,7 +1003,7 @@ save(phylo_rare, seqtab_rare, samdf_cleanest, taxa_clean, file = "Data/16s_data/
 
 ### Trim underrepresented OUTs
 
-```{r trim low OUTs}
+```{r trim low OTUs}
 
 load(file = "Data/16s_data/phylo_clean.Rdata")
 
@@ -1303,7 +1309,7 @@ simp_stat_plot
 
 
 #### Shannon diversity
-
+STARTHERE
 ```{r shannon diversity by treatment}
 
 shan_plot <- ggplot(alpha_df_div, aes(x = Treatment, y = Shannon, color = Treatment, fill = Treatment, shape = Treatment)) +
