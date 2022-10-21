@@ -1116,17 +1116,103 @@ trim_rare_rel_phyla <- plot_bar2(phylo_trim_rel, x = "Genotype", fill="Phylum", 
   geom_bar(stat="identity") +
   theme_bw() +
   theme(panel.grid = element_blank(), legend.position = "bottom", ) +
-  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(21)) +
-  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(21)) +
+  scale_fill_manual(values = rev(colorRampPalette(brewer.pal(8, "Paired"))(25))) +
+  scale_colour_manual(values = rev(colorRampPalette(brewer.pal(8, "Paired"))(25))) +
   ylab("Relative abundance") +
   facet_wrap2( ~ Treatment, scales = "free_y", ncol = 4,  
-    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.3)[[1]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[2]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[3]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[4]])) )) +
+    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.5)[[1]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[2]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[3]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[4]])) )) +
   guides(color = guide_legend(nrow = 3, byrow = FALSE, keyheight = 0.1, default.unit = "cm"), fill = guide_legend(nrow = 3, byrow = FALSE, keyheight = 0.1, default.unit = "cm")) +
   ggtitle("Rarefied total ASVs (relative abundance)")
 ggplotly(trim_rare_rel_phyla)
+
+
+#devtools::install_github("hoesler/rwantshue")
+#library(rwantshue)
+#scheme <- iwanthue() # recreate with a seed
+#cols <- scheme$hex(21)
+#
+## ... or make custom adjustments:
+#color_space <- list(
+#	c(0, 360),	# hue range [0,360]
+#	c(40, 70),		# chroma range [0,100]
+#	c(30, 100))		# lightness range [0,100]
+#palette <- scheme$hex(
+#	n = 21,
+#	force_mode = FALSE,
+#	quality = 50,
+#	color_space = color_space)
+#
+## "#b13266" "#6be59b" "#864caf" "#bfe781" "#5852a5" "#9fb140" "#827fe2" "#dec362" "#518dda" "#cd8a3b" "#d589db" "#5faf5f" #"#a0418d" "#3f7a2d" "#e070a5" "#4cd7bf" "#a73235" "#837c28" "#dd6370" "#964e1c" "#e07654"
+#
+#plot_bar2(phylo_trim_rel, x = "Genotype", fill="Phylum", colour="Phylum")+
+#  geom_bar(stat="identity") +
+#  theme_bw() +
+#  theme(panel.grid = element_blank(), legend.position = "bottom", ) +
+#  scale_fill_manual(values = rev(palette)) +
+#  scale_colour_manual(values = rev(palette)) +
+#  ylab("Relative abundance") +
+#  facet_wrap2( ~ Treatment, scales = "free_y", ncol = 4,  
+#    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.5)[[1]]),
+#                          element_rect(fill = opacity(trt_col, 0.5)[[2]]),
+#                          element_rect(fill = opacity(trt_col, 0.5)[[3]]),
+#                          element_rect(fill = opacity(trt_col, 0.5)[[4]])) )) +
+#  guides(color = guide_legend(nrow = 3, byrow = FALSE, keyheight = 0.1, default.unit = "cm"), fill = guide_legend(nrow = 3, #byrow = FALSE, keyheight = 0.1, default.unit = "cm")) +
+#  ggtitle("Rarefied total ASVs (relative abundance)")
+#
+
+
+```
+
+```{r microshades plot NOT IN PAPER, eval=FALSE, include=FALSE}
+
+#### Playing with microshades! Not using it for this project, but saving this for future reference and to spread the word.
+## added during revisions 
+
+## Install and load needed packages
+#remotes::install_github("KarstensLab/microshades")
+#remotes::install_github("mikemc/speedyseq")
+
+library(microshades)
+library(cowplot)
+
+
+# Agglomerate and normalize the phyloseq object, and melt to a data frame
+mdf_prep <- prep_mdf(phylo_trim_rel)
+
+# Generate a color object for the specified data
+color_objs_GP <- create_color_dfs(mdf_prep, selected_groups = c("Planctomycetota", "Proteobacteria", "Bacteroidota", "Cyanobacteria", "Firmicutes") , cvd = TRUE)
+
+# Extract
+mdf_GP <- color_objs_GP$mdf
+cdf_GP <- color_objs_GP$cdf
+
+
+
+# add additional colours to the proteo phylum
+new_groups <- extend_group(mdf_GP, cdf_GP, "Phylum", "Genus", "Proteobacteria", existing_palette = "micro_cvd_orange", new_palette = "micro_orange", n_add = 5)
+
+# update legend with extended colours
+micro_legend <- custom_legend(new_groups$mdf, new_groups$cdf)
+
+# Plot
+microshade_plot <- plot_microshades(new_groups$mdf, new_groups$cdf, x = "Genotype") + 
+  scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
+  #theme(axis.text.x = element_text(size= 6)) +
+  facet_wrap2( ~ Treatment, scales = "free_y", ncol = 2, nrow = 2,
+               strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.5)[[1]]),
+                                                        element_rect(fill = opacity(trt_col, 0.5)[[2]]),
+                                                        element_rect(fill = opacity(trt_col, 0.5)[[3]]),
+                                                        element_rect(fill = opacity(trt_col, 0.5)[[4]])) )) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.position = "none") +
+  ylab("Relative abundance") +
+  theme(axis.text.x = element_text(size= 6)) + 
+  theme(plot.margin = margin(6,20,6,6))
+
+plot_grid(microshade_plot, micro_legend,  rel_widths = c(1, .25))
 
 ```
 
@@ -1142,14 +1228,14 @@ proteo_plot <- plot_bar2(phylo_proteo_rel, x = "Genotype", fill = "Order", colou
   geom_bar(stat="identity") +
   theme_bw() +
   theme(panel.grid = element_blank(), legend.key.size = unit(0.3, 'cm')) +
-  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(24)) +
-  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(24)) +
+  scale_fill_manual(values = rev(colorRampPalette(brewer.pal(8, "Paired"))(24))) +
+  scale_colour_manual(values = rev(colorRampPalette(brewer.pal(8, "Paired"))(24))) +
   ylab("Relative abundance") +
   facet_wrap2( ~ Treatment, scales = "free_y",  
-    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.3)[[1]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[2]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[3]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[4]])) )) +
+    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.5)[[1]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[2]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[3]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[4]])) )) +
   guides(color = guide_legend(ncol = 1), fill = guide_legend(ncol = 1)) +
   ggtitle("Proteobacteria ASVs (relative abundance)")
 ggplotly(proteo_plot)
@@ -1185,14 +1271,14 @@ rick_plot <- plot_bar2(phylo_rick_rel, x = "Genotype", fill = "seqs_ps", colour 
   geom_bar(stat = "identity") +
   theme_bw() +
   theme(panel.grid = element_blank()) +
-  scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(4), labels = rownames(phylo_rick_df)) +
-  scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(4), labels = rownames(phylo_rick_df)) +
+  scale_fill_manual(values = (colorRampPalette(brewer.pal(8, "Paired"))(5)), labels = rownames(phylo_rick_df)) +
+  scale_colour_manual(values = (colorRampPalette(brewer.pal(8, "Paired"))(5)), labels = rownames(phylo_rick_df)) +
   ylab("Relative abundance") +
   facet_wrap2( ~ Treatment, scales = "free_y",  
-    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.3)[[1]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[2]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[3]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[4]])) )) +
+    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.5)[[1]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[2]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[3]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[4]])) )) +
   ggtitle("Rickettsiales ASVs")
 rick_plot
 #ggplotly(rick_plot)
@@ -1570,8 +1656,8 @@ plot2 <- plot_bar(ps.top20, x = "Genotype", fill="Genus")+
   geom_bar(stat="identity")+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(15)) +
-  #scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(15)) +
+  scale_fill_manual(values = (colorRampPalette(brewer.pal(8, "Paired"))(20))) +
+  #scale_colour_manual(values = rev(colorRampPalette(brewer.pal(8, "Paired"))(25))) +
   facet_wrap(~Treatment, ncol = 2) +
   ggtitle("Top 20 ASVs across samples")
 plot2
@@ -1604,14 +1690,14 @@ no_rick_barplot <- plot_bar2(gen_rick_rel, x = "Genotype", fill = "Class", colou
   geom_bar(stat="identity") +
   theme_bw() +
   theme(panel.grid = element_blank(), legend.key.size = unit(0.3, 'cm')) +
-  scale_fill_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(22)) +
-  scale_colour_manual(values = colorRampPalette(brewer.pal(8, "PiYG"))(22)) +
+  scale_fill_manual(values = rev(colorRampPalette(brewer.pal(8, "Paired"))(25))) +
+  scale_colour_manual(values = rev(colorRampPalette(brewer.pal(8, "Paired"))(25))) +
   ylab("Relative abundance") +
   facet_wrap2( ~ Treatment, scales = "free_y", ncol = 4,  
-    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.3)[[1]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[2]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[3]]),
-                          element_rect(fill = opacity(trt_col, 0.3)[[4]])) )) +
+    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.5)[[1]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[2]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[3]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[4]])) )) +
   guides(color = guide_legend(ncol = 1), fill = guide_legend(ncol = 1)) +
   ggtitle("Non Aquarickettsia diversity (relative abundance)")
 ggplotly(no_rick_barplot)
@@ -1853,8 +1939,8 @@ plot_bar2(phylo_core_genus_rel, x = "Genotype", fill="Genus", colour="Genus")+
   geom_bar(stat="identity", colour = "black")+
   theme_bw()+
   theme(panel.grid = element_blank()) +
-  scale_fill_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(6)) +
-  scale_colour_manual(values = colorRampPalette(rev(brewer.pal(8, "PiYG")))(6)) +
+  scale_fill_manual(values = (colorRampPalette(brewer.pal(8, "Paired"))(8))) +
+  scale_colour_manual(values = (colorRampPalette(brewer.pal(8, "Paired"))(8))) +
   facet_wrap(~Treatment, ncol = 2) +
   ggtitle("Relative abundance of core taxa (6 ASVs in total)")
 
@@ -2280,7 +2366,7 @@ meta <- read.csv("Data/Acerv_MP_Metadata.csv") %>%
 
 ```{r counts post symportal, include=FALSE}
 
-### This portion to calculate count stats was written and run by Annabel Huges:
+### This portion to calculate count stats was written and run by Annabel Hughes:
 
 library(Rmisc)
 
@@ -2340,30 +2426,30 @@ phylo_its2 <- phyloseq(sample_data(meta),
 
 ### Abundance by treatment and genotype
 
-```{r calc rel abund and save phylo objc, fig.height = 4, fig.width = 6, fig.align = "center"}
+```{r calc rel abund and save phylo objc, fig.height = 4.5, fig.width = 6, fig.align = "center"}
 
 ## Calculate relative abundance per sample
 phylo_its2_rel <- transform_sample_counts(phylo_its2, function(OTU) OTU/sum(OTU))
 
 ## plot relative majority ITS2 by treatment
-plot_bar2(phylo_its2_rel, x = "Genotype", fill = "majority_its2", colour = "majority_its2")+
+plot_bar2(phylo_its2_rel, x = "Genotype", fill = "majority_its2", colour = "majority_its2", size = 0.2)+
   theme_bw() +
-  facet_wrap(~ Treatment, ncol = 2) +
+    facet_wrap2( ~ Treatment, scales = "free_y", ncol = 2, nrow = 2,  
+    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.5)[[1]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[2]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[3]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[4]])) )) +
   theme(panel.grid = element_blank(), legend.position = "bottom", strip.background = element_blank(), strip.text = element_text(face = "bold")) +
   labs(x = "", y = "Relative abundance") +
-  scale_color_manual("Majority ITS2", values = c("#9e9ac8", "#54278f")) +
-  scale_fill_manual( "Majority ITS2", values = c("#9e9ac8", "#54278f")) +
+  scale_color_manual("Majority ITS2", values = c("#636363", "#636363")) +
+  scale_fill_manual( "Majority ITS2", values = c("#d9d9d9", "#636363")) +
   scale_y_continuous(expand = c(0, 0), limits = c(0, 1.02))
 
-ggsave("Figures/Supplemental/FigSXX_ITS2_GenxTrt.png", height = 4, width = 6, dpi = 600)
-ggsave("Figures/Supplemental/FigSXX_ITS2_GenxTrt.pdf", height = 4, width = 6, useDingbats = FALSE)
 
 ## Save both the absolute and relative abundance phyloseq objects
 #save(phylo_its2, phylo_its2_rel, file = "Data/ITS2_data/its_phylo_abund.Rdata")
 
 ```
-
-**Figure SXX.** Relative abundance of major ITS2 types by coral fragment (x axis) and treatment (facets). Light green represent *Symbiodinium* spp. (A3) and dark green represents *Breviolum* spp. (B2).
 
 <br/>
 <br/>
@@ -2387,8 +2473,8 @@ plot_bar2(its_rel_trt, x = "Treatment", fill = "majority_its2", colour = "majori
   theme_bw() +
   theme(panel.grid = element_blank(), legend.position = "bottom") +
   labs(x = "", y = "Relative abundance") +
-  scale_color_manual("Majority ITS2", values = c("#9e9ac8", "#54278f")) +
-  scale_fill_manual( "Majority ITS2", values = c("#9e9ac8", "#54278f")) +
+  scale_color_manual("Majority ITS2", values = c("#d9d9d9", "#636363")) +
+  scale_fill_manual( "Majority ITS2", values = c("#d9d9d9", "#636363")) +
   scale_y_continuous(expand = c(0, 0), limits = c(0, 1.01))
 
 ```
@@ -2437,22 +2523,27 @@ Cleaned 16S reads before trimming and rarefaction averaged `r format(round(mean_
 
 ### Figure 2
 
-```{r figure 4, fig.height = 4, fig.width = 4}
+```{r figure 2, fig.height = 4.5, fig.width = 6}
 
-plot_bar2(its_rel_trt, x = "Treatment", fill = "majority_its2", colour = "majority_its2")+
+plot_bar2(phylo_its2_rel, x = "Genotype", fill = "majority_its2", colour = "majority_its2", size = 0.2)+
   theme_bw() +
-  theme(panel.grid = element_blank(), legend.position = "bottom") +
+    facet_wrap2( ~ Treatment, scales = "free_y", ncol = 2, nrow = 2,  
+    strip = strip_themed(background_x = list(element_rect(fill = opacity(trt_col, 0.5)[[1]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[2]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[3]]),
+                          element_rect(fill = opacity(trt_col, 0.5)[[4]])) )) +
+  theme(panel.grid = element_blank(), legend.position = "bottom", strip.background = element_blank(), strip.text = element_text(face = "bold")) +
   labs(x = "", y = "Relative abundance") +
-  scale_color_manual("Majority ITS2", values = c("#9e9ac8", "#54278f")) +
-  scale_fill_manual( "Majority ITS2", values = c("#9e9ac8", "#54278f")) +
-  scale_y_continuous(expand = c(0, 0), limits = c(0, 1.01))
+  scale_color_manual("Majority ITS2", values = c("#636363", "#636363")) +
+  scale_fill_manual( "Majority ITS2", values = c("#d9d9d9", "#636363")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 1.02))
 
-ggsave("Figures/Fig2_ITS2.png", height = 4, width = 4, dpi = 600)
-ggsave("Figures/Fig2_ITS2.pdf", height = 4, width = 4, useDingbats = FALSE)
+ggsave("Figures/Fig2_ITS2.png", height = 4.5, width = 6, dpi = 600)
+ggsave("Figures/Fig2_ITS2.pdf", height = 4.5, width = 6, useDingbats = FALSE)
 
 ```
 
-**Figure 2.** Relative abundance of major ITS2 types grouped by treatment (n = 4-5 corals per treatment). Light purple represents *Symbiodinium fitti* (A3) and dark purple represents *Breviolum minutum* (B2).
+**Figure 2.** Relative abundance of major ITS2 types across each sample grouped by treatment. Light grey represents *Symbiodinium fitti* (A3) and dark grey represents *Breviolum minutum* (B2).
 
 <br/>
 <br/>

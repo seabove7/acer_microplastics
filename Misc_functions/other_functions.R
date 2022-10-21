@@ -24,10 +24,14 @@ getN <- function(x) sum(getUniques(x)) # function to count reads for all samples
 
 
 ## plot_bar2()
-plot_bar2 <- function(physeq, x = "Sample", y = "Abundance", fill = NULL, colour = colour, title = NULL, facet_grid = NULL) {
+plot_bar2 <- function(physeq, x = "Sample", y = "Abundance", fill = NULL, colour = colour, title = NULL, facet_grid = NULL, size = NULL) {
   mdf = psmelt(physeq)
   p = ggplot(mdf, aes_string(x = x, y = y, fill = fill, colour = fill))
-  p = p + geom_bar(stat = "identity", position = "stack")
+  if (is.null(size)) {
+    p <- p + geom_bar(stat = "identity", position = "stack")
+  } else {
+    p <- p + geom_bar(stat = "identity", position = "stack", size = size)
+  }
   p = p + theme(axis.text.x = element_text(angle = -90, hjust = 0))
   if (!is.null(facet_grid)) {
     p <- p + facet_grid(facet_grid)
