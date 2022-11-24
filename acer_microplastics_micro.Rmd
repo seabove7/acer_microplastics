@@ -110,6 +110,9 @@ devtools::install_github("awhstin/awtools")
 ## facet label colours
 devtools::install_github("teunbrand/ggh4x")
 
+## need this specific update to make collapse_rows() work
+devtools::install_github(repo="haozhu233/kableExtra", ref="a6af5c0", force = TRUE)
+
 ```
 
 ```{r load packages, echo = FALSE}
@@ -136,6 +139,7 @@ library(patchwork)
 library(compositions)
 library(ggh4x) 
 library(shades)
+library(webshot)
 
 ```
 
@@ -175,7 +179,7 @@ I am largely following the [DADA2](https://www.bioconductor.org/packages/release
 wd <- getwd()
 
 if(length(grep("Dropbox", wd)) > 0) {
-  path_16S <- "/Users/colleen/Dropbox/BU/DaviesLab/ACER_microplastics/16S_fastq" 
+  path_16S <- "/Users/colleen/Dropbox/BU/DaviesLab/ACER_microplastics - in review/16S_fastq" 
 } else {
   path_16S <- "/projectnb/davieslab/bove/acer_MP/final_samples/16S_29Jun22" 
 }
@@ -2609,40 +2613,95 @@ ggsave("Figures/Figure5_16s_diversity.pdf", height = 9, width = 14, useDingbats 
 
 ## Supplemental figures {.tabset}
 
-### Supplemental Figure 4
+### Supplemental Figure 1
 
-```{r fig S4 rick ASVs, fig.align = 'center', fig.height = 7, fig.width = 8}
+```{r fig S1 conditions, fig.align = 'center', fig.height = 5, fig.width = 12}
+
+env_df <- read.csv("Data/Acerv_MP_EnvData.csv", header = TRUE)[1:11] %>% 
+  mutate(Tank = factor(Tank),
+         Combined.Treatmenr = fct_recode(Combined.Treatmenr, # rename the treatment IDs to match
+                                         "AMB" = "AMB Control", 
+                                         "MP+" = "AMB MP+", 
+                                         "OAW" = "OAW Control", 
+                                         "OAW+MP" = "OAW MP+")) 
+  
+## treatment summary through time 
+env_summary <- env_df %>% 
+  group_by(Combined.Treatmenr, Date) %>% 
+  dplyr::summarise(across(where(is.numeric), list(mean = mean, sd = sd, min = min, max = max), na.rm = TRUE)) %>% 
+  dplyr::rename(Treatment = Combined.Treatmenr)
+
+
+env_plot_df <- env_summary %>% 
+  pivot_longer(Temp_mean:pH_max, names_to = "param", values_to = "value") %>% 
+  separate(param, c("Param", "Measure")) %>% 
+  pivot_wider(names_from = Measure, values_from = value) %>% 
+  mutate(Date = as.Date(Date, format = "%m/%d/%y"),
+         Param = fct_recode(Param, # rename parameters with units
+                                         "DO (ppm)" = "DO", 
+                                         "pH (total scale)" = "pH", 
+                                         "Salinity (ppt)" = "Salinity", 
+                                         "Temperature (°C)" = "Temp"))
+  
+        
+figS1 <- ggplot(data = env_plot_df, aes(x = Date, y = mean, colour = Treatment, group = Treatment)) +
+  geom_ribbon(aes(ymin = mean - sd, ymax = mean + sd, fill = Treatment), alpha = 0.3, colour = NA) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap(~ Param, scales = "free_y") +
+  theme(panel.grid = element_blank(), axis.title = element_blank()) +
+  scale_x_date(date_breaks = "3 days", date_labels = "%d %b", limit = c(min(env_plot_df$Date), max(env_plot_df$Date)), expand=c(0,0)) +
+  scale_colour_manual(values = trt_col) +
+  scale_fill_manual(values = trt_col) 
+figS1
+
+## save figure 
+ggsave("Figures/Supplemental/FigureS1_WaterQuality.png", height = 5, width = 12, dpi = 600)
+ggsave("Figures/Supplemental/FigureS1_WaterQuality.pdf", height = 5, width = 12, useDingbats = FALSE)
+
+```
+
+**Supplemental Figure 1:** Average seawater conditions across all tanks per treatment throughout the experiment (temperature = °C; dissolved oxygen = ppm; salinity = ppt; pH = total scale). Treatment is depicted by color in all panels: light blue = ambient conditions (AMB), dark blue = ocean acidification and warming (OAW), orange = microplastics (MP), and dark red = OAW and MP (OAW+MP).
+
+<br/>
+<br/>
+
+
+
+### Supplemental Figure 5
+
+```{r fig S5 rick ASVs, fig.align = 'center', fig.height = 7, fig.width = 8}
 
 ## renaming the rick ASV plot for supps
 figS4 <- rick_plot + theme(legend.title = element_blank(), legend.position = "bottom")
 figS4
 
 ## save figure 
-ggsave("Figures/Supplemental/FigureS4_RickettsialesASVs.png", height = 7, width = 8, dpi = 600)
-ggsave("Figures/Supplemental/FigureS4_RickettsialesASVs.pdf", height = 7, width = 8, useDingbats = FALSE)
+ggsave("Figures/Supplemental/FigureS5_RickettsialesASVs.png", height = 7, width = 8, dpi = 600)
+ggsave("Figures/Supplemental/FigureS5_RickettsialesASVs.pdf", height = 7, width = 8, useDingbats = FALSE)
 
 ```
 
-**Supplemental Figure 4:** Relative abundance of the four identified ASVs within order Rickettsiales across all samples. Samples were dominated by ASV 37, with background presence of the other 3 ASVs.
+**Supplemental Figure 5:** Relative abundance of the four identified ASVs within order Rickettsiales across all samples. Samples were dominated by ASV 37, with background presence of the other 3 ASVs.
 
 <br/>
 <br/>
 
 
-### Supplemental Figure 5
+### Supplemental Figure 6
 
 ```{r fig S5 alpha diversity, fig.align = 'center', fig.height = 7, fig.width = 8}
 
-figS5 <- ggarrange(simp_stat_plot, shan_stat_plot, rich_stat_plot, even_stat_plot, common.legend = TRUE, labels = "AUTO", legend = "right") 
-figS5
+figS6 <- ggarrange(simp_stat_plot, shan_stat_plot, rich_stat_plot, even_stat_plot, common.legend = TRUE, labels = "AUTO", legend = "right") 
+figS6
 
 ## save figure 
-ggsave("Figures/Supplemental/FigureS5_alpha.png", height = 7, width = 8, dpi = 600)
-ggsave("Figures/Supplemental/FigureS5_alpha.pdf", height = 7, width = 8, useDingbats = FALSE)
+ggsave("Figures/Supplemental/FigureS6_alpha.png", height = 7, width = 8, dpi = 600)
+ggsave("Figures/Supplemental/FigureS6_alpha.pdf", height = 7, width = 8, useDingbats = FALSE)
 
 ```
 
-**Supplemental Figure 5:** Alpha diversity metrics across all samples in all treatments, depicting (**A**) Simpson index, (**B**) Shannon index, (**C**) species richness (ASVs), and (**D**) Evenness.
+**Supplemental Figure 6:** Alpha diversity metrics across all samples in all treatments, depicting (**A**) Simpson index, (**B**) Shannon index, (**C**) species richness (ASVs), and (**D**) Evenness.
 
 <br/>
 <br/>
@@ -2685,36 +2744,41 @@ ggsave("Figures/Supplemental/FigureS6_roRock_alpha.pdf", height = 6, width = 16,
 **Table S1:** Environmental conditions measured in every tank every day throughout the experiment by treatment and specific to each tank (temperature = °C; dissolved oxygen = ppm ; salinity = ppt; pH = total scale).
 ```{r table S1}
 
-env_df <- read.csv("Data/Acerv_MP_EnvData.csv", header = TRUE)[1:11] %>% 
-  mutate(Tank = factor(Tank))
-
-
 ## Tank summary
 tank_summary <- env_df %>% 
-  group_by(ID) %>% 
+  group_by(Combined.Treatmenr, ID) %>% 
   dplyr::summarise(across(where(is.numeric), list(mean = mean, sd = sd, min = min, max = max), na.rm = TRUE)) %>% 
-  dplyr::rename(` ` = ID)
+  dplyr::rename(` ` = ID) %>% 
+  dplyr::rename(Treatment = Combined.Treatmenr)
   
 ## Tank summary
 treat_summary <- env_df %>% 
   group_by(Combined.Treatmenr) %>% 
   dplyr::summarise(across(where(is.numeric), list(mean = mean, sd = sd, min = min, max = max), na.rm = TRUE)) %>% 
+  add_column(Treatment = "Treatment Summary", .before = "Combined.Treatmenr") %>% 
   dplyr::rename(` ` = Combined.Treatmenr)
 
 
 ## Combine them
-env_summary <- rbind(treat_summary, tank_summary)
+env_summary <- rbind(data.frame(treat_summary), data.frame(tank_summary))
 
 rep_list <- c("Mean", "SD", "Minimum", "Maximum")
 
+
 ## makrdown version of supp table
-kable(env_summary, row.names = FALSE, digits = 2, col.names = c(" ", rep(rep_list, 4))) %>% 
+kable(env_summary, row.names = FALSE, digits = 2, col.names = c(" ", " ", rep(rep_list, 4))) %>% 
   kable_classic_2() %>% 
   kable_styling(font_size = 10, full_width = FALSE) %>% 
-  add_header_above(c(" ", "Temperature" = 4, "Dissolved Oxygen" = 4, "Salinity" = 4, "pH" = 4)) %>%
+  add_header_above(c(" " = 2, "Temperature" = 4, "Dissolved Oxygen" = 4, "Salinity" = 4, "pH" = 4)) %>%
   pack_rows("Treatment", 1, 4) %>%
   pack_rows("Tank", 5, 40) %>%
-  column_spec(c(1,5,9,13), border_right = TRUE)
+  column_spec(c(2,5,9,13), border_right = TRUE) %>% 
+  kableExtra::collapse_rows(columns = 1, valign = "top") %>%
+  save_kable("Tables/TableS1_SWconditions.html")
+
+## save table S1 as PDF and CSV
+webshot("Tables/TableS1_SWconditions.html", "Tables/TableS1_SWconditions.pdf")
+write.csv(env_summary, "Tables/TableS1_SWconditions.csv")
 
 ```
 
