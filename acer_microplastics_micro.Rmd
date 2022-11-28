@@ -1262,7 +1262,6 @@ aqua_max <- round((max(otu_df$ASV1) * 100), 1)
 ```
 
 
-
 ```{r barplot Rickettsiales ASVs}
 
 ## Selecting just Order Rickettsiales  
@@ -1286,6 +1285,18 @@ rick_plot <- plot_bar2(phylo_rick_rel, x = "Genotype", fill = "seqs_ps", colour 
   ggtitle("Rickettsiales ASVs")
 rick_plot
 #ggplotly(rick_plot)
+
+```
+
+```{r aqua asv percentages, include=FALSE}
+
+### Calculate the relative abundance of Rickettsiales ASVs of all samples
+relabun_aqua <- tax_glom(phylo_trim_rel, taxrank = "Order", NArm = FALSE)
+relabun_aqua <- subset_taxa(relabun_aqua, Order %in% "Rickettsiales")
+
+aqua_percent_df <- psmelt(relabun_aqua) %>%
+  group_by(Sample, Treatment, Order) %>%
+  summarize(mean_abund = round(mean(Abundance, na.rm=TRUE), 2)) 
 
 ```
 
