@@ -1,12 +1,11 @@
 type: dataset
-cff-version: 1.0.0
+cff-version: 1.2.0
 message: "If you use this code in your own analyses, please cite it as below."
 authors:
   - family-names: Bove
     given-names: Colleen B.
     orcid: https://orcid.org/0000-0003-0340-1371
-title: seabove7/acer_microplastics: Manuscript Resubmission
-version: 1.0
+title: "Data and Code: Exposure to global change and microplastics elicits an immune response in an endangered coral"
+version: 1.0.0
 doi: 10.5281/zenodo.7396265
 date-released: 2022-12-04
-url: "https://github.com/seabove7/acer_microplastics"
