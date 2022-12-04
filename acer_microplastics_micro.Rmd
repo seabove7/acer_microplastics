@@ -51,7 +51,7 @@ body {
 
 #### **Abstract:**
 
-Global change is increasing seawater temperatures and decreasing oceanic pH, driving declines of coral reefs globally. Coral ecosystems are also impacted by local stressors, including microplastics, which are ubiquitous on reefs. While the independent effects of these global and local stressors are well-documented, their interactions remain less explored. Here, we examine the independent and combined effects of global change (ocean warming and acidification) and microplastics exposures on gene expression (GE) and microbial community composition in the endangered coral *Acropora cervicornis*. Nine genotypes were fragmented and maintained in one of four experimental treatments: 1) ambient conditions (ambient seawater, no microplastics; AMB); 2) microplastics treatment (ambient seawater, microplastics; MP); 3) global change conditions (warm and acidic conditions, no microplastics; OAW); and 4) multistressor treatment (warm and acidic conditions with microplastics; OAW+MP) for 21 days after which corals were sampled for genome-wide GE profiling and ITS and 16S metabarcoding. Overall *A. cervicornis* GE responses to all treatments were subtle; however, corals in the multistressor treatment exhibited the strongest GE responses, and gene ontology enrichment analyses showcased that genes associated with innate immunity were overrepresented in this treatment. 16S analyses showcased that microbiomes were dominated by the bacterial symbiont Aquarickettsia and were stable, suggesting that *A. cervicornis* exhibited remarkably low variability in community composition, and future work should focus on functional differences across these bacterial communities as well as the influence of viruses in these responses. Overall, results suggest that local stressors present a unique challenge to endangered coral species under global change.
+Global change is increasing seawater temperatures and decreasing oceanic pH, driving declines of coral reefs globally. Coral ecosystems are also impacted by local stressors, including microplastics, which are ubiquitous on reefs. While the independent effects of these global and local stressors are well-documented, their interactions remain less explored. Here, we examine the independent and combined effects of global change (ocean warming and acidification) and microplastics exposures on gene expression (GE) and microbial community composition in the endangered coral *Acropora cervicornis*. Nine genotypes were fragmented and maintained in one of four experimental treatments: 1) ambient conditions (ambient seawater, no microplastics; AMB); 2) microplastics treatment (ambient seawater, microplastics; MP); 3) global change conditions (warm and acidic conditions, no microplastics; OAW); and 4) multistressor treatment (warm and acidic conditions with microplastics; OAW+MP) for 22 days, after which corals were sampled for genome-wide GE profiling and ITS2 and 16S metabarcoding. Overall *A. cervicornis* GE responses to all treatments were subtle; however, corals in the multistressor treatment exhibited the strongest GE responses, and genes associated with innate immunity were overrepresented in this treatment. ITS2 analyses confirmed that all coral were associated with *Symbiodinium fitti* and 16S analyses revealed similar microbiomes dominated by the bacterial associate *Aquarickettsia*, suggesting that these *A. cervicornis* fragments exhibited remarkably low variability in algal and bacterial community compositions. Future work should focus on functional differences across microbiomes, especially *Aquarickettsia* and viruses, in these responses. Overall, results suggest that when local stressors are coupled with global change, these interacting stressors present unique challenges to this endangered coral species.
 
 <br/>
 
@@ -2520,16 +2520,18 @@ Beta diversity of the 16S trimmed counts based on treatment and genotype was ass
 
 ## Results
 
-### Symbiodiniaceae community composition
+### All coral fragments are dominated by the microalgal symbiont *Symbiodinium fitti*
 
-Raw ITS2 counts before submission to *SymPortal* ranged from `r its_raw_df$min` to `r its_raw_df$max`, with a mean of `r its_raw_df$mean`. After classification by *SymPortal*, ITS2 counts ranged from `r symp_count_min` – `r symp_count_max` per sample across all 36 samples with mean `r round(symp_count_mean, 0)` counts. All coral individuals hosted *Symbiodinium ‘fitti’* (ITS2 type A3) with 44% of individuals (n=16) hosting small background amounts of *Breviolum minutum* (ITS2 type B2).
+Raw ITS2 counts before submission to *SymPortal* ranged from `r its_raw_df$min` to `r its_raw_df$max`, with a mean of `r its_raw_df$mean`. After classification by *SymPortal*, ITS2 counts ranged from `r symp_count_min` – `r symp_count_max` per sample across all 36 samples with mean `r round(symp_count_mean, 0)` counts. All coral individuals hosted *Symbiodinium ‘fitti’* (ITS2 type A3) with 44% of individuals (N=16) hosting small background amounts of *Breviolum minutum* (ITS2 type B2) (Figure 2).
 
 <br/>
 
 
 ### *Acropora cervicornis* fragments are dominated by order Rickettsiales
 
-Cleaned 16S reads before trimming and rarefaction averaged `r format(round(mean_preRare, 0), scientific = FALSE)` ± `r format(round(sd_preRare, 0), scientific = FALSE)` (±SD) per sample across all *A. cervicornis* samples with a minimum of `r format(min(preRare_count), scientific = FALSE)` (Sample `r as.character(track_reads$Sample[track_reads$"Sample ID" == min_sample])`) and a maximum of `r format(max(preRare_count), scientific = FALSE)` (Sample `r as.character(track_reads$Sample[track_reads$"Sample ID" == max_sample])`). Fragments were dominated by taxa from the phylum Proteobacteria (**Figure 5A**), which was dominated by a single ASV (Genus MD3-55; Ca. Aquarickettsia) within the order Rickettsiales (**Figure 5B**; see **Supplemental Figure XX**). Beta diversity analyses did not identify any statistical differences across samples based experimental treatment or genotype (**Figure 5C and Table SXX**). Similarly, alpha diversity was indistinguishable across treatments (**Supplemental Figure SXX and Table SXX**). After removing Aquarickettsia from all samples to assess background bacterial communities, there were still no differences in alpha and beta diversity across treatments or genotypes (**Supplemental Figure SXX and Table SXX**).
+Cleaned 16S reads before trimming and rarefaction averaged `r format(round(mean_preRare, 0), scientific = FALSE)` ± `r format(round(sd_preRare, 0), scientific = FALSE)` (±SD) per sample across all *A. cervicornis* samples with a minimum of `r format(min(preRare_count), scientific = FALSE)` (Sample `r as.character(track_reads$Sample[track_reads$"Sample ID" == min_sample])`) and a maximum of `r format(max(preRare_count), scientific = FALSE)` (Sample `r as.character(track_reads$Sample[track_reads$"Sample ID" == max_sample])`). Fragments were dominated by taxa from the phylum Proteobacteria (**Figure 5A**), which was dominated by a single ASV (Genus MD3-55; *Ca.* Aquarickettsia) within the order Rickettsiales (**Figure 5B**; see **Supplemental Figure 5**). This dominant ASV was a 100% match to the published 16S rRNA sequence for the putative bacterial parasite “*Ca.* Aquarickettsia rohweri” (hereafter, *Aquarickettsia*) (J. G. Klinges et al. 2019) that is common in *A. cervicornis* across the Caribbean (Williams et al. 2022; Godoy-Vitorino et al. 2017).
+
+Beta diversity analyses did not identify any statistical differences across samples based experimental treatment or genotype (**Figure 5C and Table SS4**). Similarly, alpha diversity was indistinguishable across treatments (**Supplemental Figure S6 and Table S5**). After removing *Aquarickettsia* from all samples to assess background bacterial communities, there were still no differences in alpha and beta diversity across treatments or genotypes (**Supplemental Figure S7 and Table S6**).
 
 <br/>
 
@@ -2558,7 +2560,8 @@ ggsave("Figures/Fig2_ITS2.pdf", height = 4.5, width = 6, useDingbats = FALSE)
 
 ```
 
-**Figure 2.** Relative abundance of major ITS2 types across each sample grouped by treatment. Light grey represents *Symbiodinium fitti* (A3) and dark grey represents *Breviolum minutum* (B2).
+**Figure 2.** Relative abundance of major ITS2 types across each sample grouped by treatment. Light grey represents *Symbiodinium ‘fitti’* (A3) and dark grey represents *Breviolum minutum* (B2).
+
 
 <br/>
 <br/>
@@ -2616,7 +2619,7 @@ ggsave("Figures/Figure5_16s_diversity.pdf", height = 9, width = 14, useDingbats 
 
 ```
 
-**Figure 5:** *Acropora cervicornis* bacterial (16S) relative abundance across fragments and experimental treatments. Diversity at the phylum level (**A**) depicts dominance of all samples by taxa from Proteobacteria and this (**B**) phylum was dominated by the order Rickettsiales in most samples. Beta diversity was visualized through (**C**) multivariate ordination plots (PCoA) of between-sample Bray–Curtis dissimilarity of rarefied ASVs of all taxa and (**D**) distance to treatment centroids. PCoA ellipses depict 95% confidence intervals and p-values indicate significance of treatment and genotype.
+**Figure 5:** *Acropora cervicornis* bacterial (16S) relative abundance across fragments and experimental treatments. Diversity at the phylum level (**A**) depicts dominance of all samples by taxa from Proteobacteria and this (**B**) phylum was dominated by the order Rickettsiales in most samples. Bacterial diversity color was assigned alphabetically, not based on abundance. Beta diversity was visualized through (**C**) multivariate ordination plots (PCoA) of between-sample Bray–Curtis dissimilarity of rarefied ASVs of all taxa and (**D**) distance to treatment centroids. PCoA ellipses depict 95% confidence intervals and p-values indicate significance of treatment and genotype. Treatment is depicted by color in all panels: light blue = ambient conditions (AMB), dark blue = ocean acidification and warming (OAW), orange = microplastics (MP), and dark red = OAW and MP (OAW+MP).
 
 <br/>
 <br/>
@@ -2742,7 +2745,7 @@ ggsave("Figures/Supplemental/FigureS6_roRock_alpha.pdf", height = 6, width = 16,
 
 ```
 
-**Supplemental Figure 5:** Alpha (**A-D**) and beta (**E-F**) diversity metrics across all samples in all treatments once Aquarickettsia ASVs were removed. Plots depict (**A**) Simpson index, (**B**) Shannon index, (**C**) species richness, (**D**) Evenness, (**E**) multivariate ordination plots (PCoA) of between-sample Bray–Curtis dissimilarity of rarefied ASVs and (**F**) distance to treatment centroids. PCoA ellipses depict 95% confidence intervals and p-values indicate significance of treatment and genotype. Treatment is depicted by color in all panels: blue = ambient conditions (AMB), orange = ocean acidification and warming (OAW), red = microplastics (MP), and dark red = OAW and MP (OAW+MP).
+**Supplemental Figure 5:** Alpha (**A-D**) and beta (**E-F**) diversity metrics across all samples in all treatments once Aquarickettsia ASVs were removed. Plots depict (**A**) Simpson index, (**B**) Shannon index, (**C**) species richness, (**D**) Evenness, (**E**) multivariate ordination plots (PCoA) of between-sample Bray–Curtis dissimilarity of rarefied ASVs and (**F**) distance to treatment centroids. PCoA ellipses depict 95% confidence intervals and p-values indicate significance of treatment and genotype. Treatment is depicted by color in all panels: light blue = ambient conditions (AMB), orange = ocean acidification and warming (OAW), dark blue = microplastics (MP), and dark red = OAW and MP (OAW+MP).
 
 <br/>
 <br/>
