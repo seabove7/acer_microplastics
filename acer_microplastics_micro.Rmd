@@ -59,7 +59,7 @@ Global change is increasing seawater temperatures and decreasing oceanic pH, dri
 *Goes here*
 
 
-*Repository DOI hosted on Zenodo* [![DOI](https://zenodo.org)
+*Repository DOI hosted on Zenodo:* [![DOI](https://zenodo.org/badge/510886822.svg)](https://zenodo.org/badge/latestdoi/510886822)
 
 
 <br/>
