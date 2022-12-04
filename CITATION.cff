@@ -1,3 +1,4 @@
+type: dataset
 cff-version: 1.0.0
 message: "If you use this code in your own analyses, please cite it as below."
 authors:
